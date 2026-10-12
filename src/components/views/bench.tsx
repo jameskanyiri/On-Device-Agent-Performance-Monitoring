@@ -75,6 +75,19 @@ export function BenchView() {
           columns={[
             { key: 'started', header: 'Started', primary: true, width: 'w-44', cell: (r) => <span className="truncate">{fmtDate(r.startedAt)}</span> },
             {
+              key: 'status',
+              header: 'Status',
+              width: 'w-32',
+              cell: (r) =>
+                active && r.id === session?.sessionId ? (
+                  <Chip tone="success">Running</Chip>
+                ) : r.done >= r.total ? (
+                  <Chip>Complete</Chip>
+                ) : (
+                  <Chip tone="warning">Stopped early</Chip>
+                ),
+            },
+            {
               key: 'pass',
               header: 'Pass rate',
               cell: (r) =>
@@ -98,7 +111,7 @@ export function BenchView() {
               width: 'w-28',
               align: 'end',
               cell: (r) => (
-                <span className={r.done < r.total && r.id !== session?.sessionId ? 'text-subtle-foreground' : undefined}>
+                <span className="tabular-nums">
                   {r.done} / {r.total}
                 </span>
               ),
@@ -112,7 +125,7 @@ export function BenchView() {
       {log.length ? (
         <Section title="Log" meta={`${log.length} lines`}>
           <TextFrame label={session ? session.sessionId : 'Eval log'} mono>
-            {log.map((l) => `${fmtClock(l.t)}  ${l.line}`).join('\n')}
+            {[...log].reverse().map((l) => `${fmtClock(l.t)}  ${l.line}`).join('\n')}
           </TextFrame>
         </Section>
       ) : null}

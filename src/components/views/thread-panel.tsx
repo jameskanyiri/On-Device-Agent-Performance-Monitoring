@@ -18,6 +18,7 @@ import { clipText, fmtDate, fmtDur, fmtMB, fmtNum, fmtPct, isNum } from '../form
 import { Timeline } from '../timeline';
 import { Chip, KeyValues, Section, Stat, StatGrid, StatusChip, Table, ThermalChip } from '../ui';
 import { usePoll } from '../use-poll';
+import { hotter, percentile, THERMAL_ORDER } from './explorer-kit';
 
 /*
  * A whole conversation, LangSmith-style: the turns on the left (each expands
@@ -29,15 +30,12 @@ import { usePoll } from '../use-poll';
 type ThreadData = { threadId: string | null; traces: Trace[] };
 type Selection = { kind: 'summary' } | { kind: 'trace'; traceId: string } | { kind: 'span'; traceId: string; spanId: string };
 
-const EXPANDED_KEY = 'thread-panel-expanded';
-const WIDTH_KEY = 'thread-panel-width';
 const TURNS_WIDTH_KEY = 'thread-turns-width';
 const TURNS_HIDDEN_KEY = 'thread-turns-hidden';
 const TURNS_DEFAULT = 352; // 22rem
 const TURNS_MIN = 220;
 const TURNS_STEP = 32;
 const KIND_LABEL: Record<string, string> = { generation: 'Model call', tool: 'Tool call', load: 'Model load', turn: 'Turn' };
-const THERMAL_ORDER = ['nominal', 'fair', 'light', 'moderate', 'serious', 'severe', 'critical', 'emergency', 'shutdown'];
 
 const num = (v: unknown) => (typeof v === 'number' ? v : null);
 const str = (v: unknown) => (typeof v === 'string' ? v : null);
@@ -46,10 +44,26 @@ const steps = (t: Trace) => t.spans.filter((s) => s.kind === 'generation' || s.k
 const tokensOut = (t: Trace) => steps(t).reduce((a, s) => a + (num(s.attrs?.generatedTokens) ?? 0), 0);
 const duration = (t: Trace) => (t.end ?? t.start) - t.start;
 
-function percentile(values: number[], p: number): number | null {
-  if (!values.length) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1))]!;
+/** The panel's size, remembered under `prefix`: expanded to full width, or a dragged width. */
+export function usePanelSize(prefix: string) {
+  const expandedKey = `${prefix}-expanded`;
+  const widthKey = `${prefix}-width`;
+  const [expanded, setExpanded] = useState(() => readPref(expandedKey) === '1');
+  const [width, setWidth] = useState<number | null>(() => Number(readPref(widthKey)) || null);
+  const toggleExpanded = () =>
+    setExpanded((was) => {
+      writePref(expandedKey, was ? '0' : '1');
+      return !was;
+    });
+  const changeWidth = (w: number | null) => {
+    setWidth(w);
+    writePref(widthKey, w ? String(w) : '');
+    if (expanded) {
+      setExpanded(false);
+      writePref(expandedKey, '0');
+    }
+  };
+  return { expanded, width, toggleExpanded, changeWidth };
 }
 
 /** The thread panel: open with a thread id, or a trace id (its thread opens with that turn selected). */
@@ -58,21 +72,7 @@ export function ThreadSheet({ deviceId, threadId, traceId, onClose }: { deviceId
   // Keep what was shown while the panel slides out.
   const [shown, setShown] = useState({ threadId, traceId });
   if (open && (threadId !== shown.threadId || traceId !== shown.traceId)) setShown({ threadId, traceId });
-  const [expanded, setExpanded] = useState(() => readPref(EXPANDED_KEY) === '1');
-  const [width, setWidth] = useState<number | null>(() => Number(readPref(WIDTH_KEY)) || null);
-  const toggleExpanded = () =>
-    setExpanded((was) => {
-      writePref(EXPANDED_KEY, was ? '0' : '1');
-      return !was;
-    });
-  const changeWidth = (w: number | null) => {
-    setWidth(w);
-    writePref(WIDTH_KEY, w ? String(w) : '');
-    if (expanded) {
-      setExpanded(false);
-      writePref(EXPANDED_KEY, '0');
-    }
-  };
+  const { expanded, width, toggleExpanded, changeWidth } = usePanelSize('thread-panel');
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
@@ -161,12 +161,7 @@ function ThreadContent({
             )}
           </SheetDescription>
         </div>
-        <HeaderButton label={expanded ? 'Minimize' : 'Expand'} onClick={onToggleExpanded} pressed={expanded}>
-          <span className="grid [&>*]:col-start-1 [&>*]:row-start-1">
-            <ArrowsPointingOutIcon aria-hidden="true" className={cn('size-4 transition-opacity duration-150 motion-reduce:transition-none', expanded ? 'opacity-0' : 'opacity-100')} />
-            <ArrowsPointingInIcon aria-hidden="true" className={cn('size-4 transition-opacity duration-150 motion-reduce:transition-none', expanded ? 'opacity-100' : 'opacity-0')} />
-          </span>
-        </HeaderButton>
+        <ExpandButton expanded={expanded} onToggle={onToggleExpanded} />
         <SheetClose asChild>
           <Button variant="ghost" size="icon-sm" aria-label="Close" className="text-subtle-foreground hover:text-foreground">
             <XMarkIcon aria-hidden="true" />
@@ -287,7 +282,7 @@ function ThreadContent({
  * The line between Turns and the details: drag it to resize, or focus it and use
  * the arrow keys; double-click resets. The 0.5 px hairline sits in a wider hit area.
  */
-function PaneDivider({ width, onChange }: { width: number; onChange: (w: number | null) => void }) {
+export function PaneDivider({ width, onChange, label = 'Resize turns' }: { width: number; onChange: (w: number | null) => void; label?: string }) {
   const startDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     e.preventDefault();
@@ -308,7 +303,7 @@ function PaneDivider({ width, onChange }: { width: number; onChange: (w: number 
     <div
       role="separator"
       aria-orientation="vertical"
-      aria-label="Resize turns"
+      aria-label={label}
       aria-valuenow={width}
       aria-valuemin={TURNS_MIN}
       tabIndex={0}
@@ -335,7 +330,7 @@ function Missing() {
 }
 
 /** A row in the turns tree: selectable, optionally expandable. */
-function TreeRow({
+export function TreeRow({
   children,
   selected,
   onSelect,
@@ -382,7 +377,19 @@ function TreeRow({
   );
 }
 
-function HeaderButton({ label, onClick, pressed, children }: { label: string; onClick: () => void; pressed?: boolean; children: ReactNode }) {
+/** Expand to the full window, or back to the panel's width. */
+export function ExpandButton({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
+  return (
+    <HeaderButton label={expanded ? 'Minimize' : 'Expand'} onClick={onToggle} pressed={expanded}>
+      <span className="grid [&>*]:col-start-1 [&>*]:row-start-1">
+        <ArrowsPointingOutIcon aria-hidden="true" className={cn('size-4 transition-opacity duration-150 motion-reduce:transition-none', expanded ? 'opacity-0' : 'opacity-100')} />
+        <ArrowsPointingInIcon aria-hidden="true" className={cn('size-4 transition-opacity duration-150 motion-reduce:transition-none', expanded ? 'opacity-100' : 'opacity-0')} />
+      </span>
+    </HeaderButton>
+  );
+}
+
+export function HeaderButton({ label, onClick, pressed, children }: { label: string; onClick: () => void; pressed?: boolean; children: ReactNode }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -402,7 +409,7 @@ function SummaryDetails({ traces, onSelect }: { traces: Trace[]; onSelect: (trac
   const impacts = traces.map((t) => impact(t.samples));
   const peak = maxOf(impacts.map((i) => i.peakMB));
   const lowest = minOf(impacts.map((i) => i.minHeadroomMB));
-  const hottest = impacts.map((i) => i.thermalMax).reduce<string | null>((a, b) => (b && (!a || THERMAL_ORDER.indexOf(b) > THERMAL_ORDER.indexOf(a)) ? b : a), null);
+  const hottest = impacts.map((i) => i.thermalMax).reduce<string | null>(hotter, null);
   const times = turns.map(duration);
   const platform = traces[0]?.device.platform;
   return (
@@ -522,7 +529,7 @@ function TurnDetails({ trace, number }: { trace: Trace; number: number | null })
   );
 }
 
-function Message({ role, text, model }: { role: 'You' | 'Model'; text: string | null; model?: string | null }) {
+export function Message({ role, text, model }: { role: 'You' | 'Model'; text: string | null; model?: string | null }) {
   const Icon = role === 'You' ? UserIcon : CpuChipIcon;
   return (
     <Frame>
@@ -540,7 +547,7 @@ function Message({ role, text, model }: { role: 'You' | 'Model'; text: string | 
 
 // ── A step (model call or tool call) ───────────────────────────────────────
 
-function StepDetails({ trace, span }: { trace: Trace; span: Span }) {
+export function StepDetails({ trace, span, within = 'turn' }: { trace: Trace; span: Span; within?: 'turn' | 'run' }) {
   const end = span.end ?? span.start;
   // The phone during this step: samples inside it, plus one either side so short steps still have readings.
   const inside = trace.samples.filter((s) => s.t >= span.start && s.t <= end);
@@ -560,7 +567,7 @@ function StepDetails({ trace, span }: { trace: Trace; span: Span }) {
         <Chip>{KIND_LABEL[span.kind] ?? span.kind}</Chip>
         <StatusChip status={span.status} />
         <span className="text-xs text-subtle-foreground tabular-nums">
-          +{((span.start - trace.start) / 1000).toFixed(2)} s into the turn · {fmtDur(end - span.start)}
+          +{((span.start - trace.start) / 1000).toFixed(2)} s into the {within} · {fmtDur(end - span.start)}
         </span>
       </div>
 
@@ -571,6 +578,12 @@ function StepDetails({ trace, span }: { trace: Trace; span: Span }) {
           <Stat label="Decode speed" value={num(span.attrs?.tokensPerSec) !== null ? `${fmtNum(num(span.attrs?.tokensPerSec), 1)} tok/s` : '–'} />
           <Stat label="Prompt tokens" value={fmtNum(num(span.attrs?.promptTokens))} note="Newly read this call" />
           <Stat label="Tokens out" value={fmtNum(num(span.attrs?.generatedTokens))} />
+        </StatGrid>
+      ) : span.kind === 'load' ? (
+        <StatGrid>
+          <Stat label="Duration" value={fmtDur(end - span.start)} note="Reading the model into memory" />
+          <Stat label="Prompt tokens at start" value={fmtNum(num(span.attrs?.initTokens))} note="System prompt + tool definitions" />
+          <Stat label="Context window" value={fmtNum(num(span.attrs?.maxSeqLen))} note="Tokens" />
         </StatGrid>
       ) : (
         <StatGrid>
@@ -605,7 +618,7 @@ function StepDetails({ trace, span }: { trace: Trace; span: Span }) {
 
 // ── Device impact from samples ─────────────────────────────────────────────
 
-function impact(samples: MetricSample[]) {
+export function impact(samples: MetricSample[]) {
   const mem = samples.map((s) => s.memFootprintBytes).filter(isNum);
   const head = samples.map((s) => s.memAvailableBytes).filter(isNum);
   const thermal = samples.map((s) => s.thermal).filter((x): x is string => !!x);
@@ -624,7 +637,7 @@ function impact(samples: MetricSample[]) {
   };
 }
 
-function cpuOver(samples: MetricSample[]): number | null {
+export function cpuOver(samples: MetricSample[]): number | null {
   const first = samples[0];
   const last = samples.at(-1);
   if (!first || !last || last.uptimeS <= first.uptimeS || last.cpuTimeS < first.cpuTimeS) return null;

@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import type { Trace } from '@/shared/trace';
 import { fmtDate, fmtDur, fmtMB, fmtNum, fmtPct, isNum } from '../format';
 import { Timeline } from '../timeline';
-import { ErrorState, KeyValues, LoadingState, Page, PassChip, Section, Stat, StatGrid, StatusChip, TextFrame } from '../ui';
+import { ErrorState, KeyValues, LoadingState, Page, Section, Stat, StatGrid, StatusChip } from '../ui';
 import { usePoll } from '../use-poll';
 
 export function traceDescription(trace: Trace) {
@@ -34,67 +34,6 @@ function TraceStats({ trace, energyJ }: { trace: Trace; energyJ?: number }) {
       <Stat label="CPU" value={fmtPct(cpu)} note="100% is one core" />
       {isNum(energyJ) ? <Stat label="Energy" value={`${fmtNum(energyJ, 1)} J`} /> : null}
     </StatGrid>
-  );
-}
-
-type RunDetail = {
-  trace: Trace;
-  metrics: { energyJ?: number };
-  check: { pass: boolean; detail: string };
-  turns: { prompt: string; reply: string; finishReason: string }[];
-  workspaceAfter: Record<string, string>;
-};
-
-export function RunView({ sessionId, jobId }: { sessionId: string; jobId: string }) {
-  const { data, error } = usePoll<RunDetail>(`/api/sessions/${encodeURIComponent(sessionId)}/runs/${encodeURIComponent(jobId)}`, 0);
-  if (error && !data) return <ErrorState error={error} />;
-  if (!data) return <LoadingState />;
-  const { trace, check, metrics, turns, workspaceAfter } = data;
-  const files = Object.entries(workspaceAfter ?? {});
-  return (
-    <Page
-      back={{ href: `/sessions/${encodeURIComponent(sessionId)}`, label: 'Session' }}
-      title={trace.name}
-      actions={
-        <>
-          <StatusChip status={trace.status} />
-          <PassChip pass={check.pass} />
-        </>
-      }
-      description={
-        <>
-          {traceDescription(trace)}
-          {check.pass ? null : <span className="mt-1 block text-destructive">{check.detail}</span>}
-        </>
-      }>
-      <TraceStats trace={trace} energyJ={metrics.energyJ} />
-      <Section title="Timeline" meta="Hover for values, click a span for details">
-        <Timeline spans={trace.spans} samples={trace.samples} platform={trace.device.platform} />
-      </Section>
-      <Section title="Conversation">
-        {turns.length ? (
-          turns.map((t, i) => (
-            <div key={i} className="flex flex-col gap-2">
-              <TextFrame label={`Turn ${i + 1} · You`}>{t.prompt}</TextFrame>
-              <TextFrame label={`Turn ${i + 1} · Model`} meta={t.finishReason}>
-                {t.reply || <span className="text-subtle-foreground">No reply</span>}
-              </TextFrame>
-            </div>
-          ))
-        ) : (
-          <p className="text-sm text-muted-foreground">No turns finished.</p>
-        )}
-      </Section>
-      {files.length ? (
-        <Section title="Workspace after the run" meta={`${files.length} ${files.length === 1 ? 'file' : 'files'}`}>
-          {files.map(([path, content]) => (
-            <TextFrame key={path} label={<span className="font-mono text-xs">{path}</span>} mono>
-              {content}
-            </TextFrame>
-          ))}
-        </Section>
-      ) : null}
-    </Page>
   );
 }
 

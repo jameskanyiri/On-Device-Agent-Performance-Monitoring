@@ -158,6 +158,8 @@ export function sessionDetail(id: string) {
         startedAt: run.startedAt,
         pass: check.pass,
         detail: check.detail,
+        prompt: run.turns[0] ? clip(run.turns[0].prompt, 200) : null,
+        reply: run.turns.at(-1) ? clip(run.turns.at(-1)!.reply, 200) : null,
         metrics,
       };
     }),

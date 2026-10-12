@@ -1,18 +1,14 @@
 'use client';
 
-import { ChevronDoubleLeftIcon, ChevronDoubleRightIcon, ClockIcon, MagnifyingGlassIcon, ViewColumnsIcon } from '@heroicons/react/20/solid';
-import { useState, type ReactNode } from 'react';
+import { ChevronDoubleRightIcon, ClockIcon, MagnifyingGlassIcon } from '@heroicons/react/20/solid';
+import { useState } from 'react';
 
 import { cn } from '@/lib/utils';
-import { Button } from '@/ui/button';
-import { Checkbox } from '@/ui/checkbox';
 import { Input } from '@/ui/input';
-import { Label } from '@/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/ui/popover';
 import { ToggleGroup, ToggleGroupItem } from '@/ui/toggle-group';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip';
 import { ago, fmtDur, fmtMB, fmtNum, fmtPct } from '../format';
-import { Chip, StatusChip, Table, ThermalChip, type Column } from '../ui';
+import { Chip, StatusChip, Table, ThermalChip } from '../ui';
+import { ColumnsMenu, FacetSidebar, hotter, IconButton, passesFacets, percentile, pick, useColumns, useFacets, WideTable, type ColumnDef, type FacetGroup } from './explorer-kit';
 
 /*
  * The device's traces, explored like LangSmith: group by Threads (conversations),
@@ -85,15 +81,6 @@ const TYPE_LABEL: Record<string, string> = { turn: 'Reply', load: 'Model load', 
 const NO_TOOLS = '(no tools)';
 const UNKNOWN_THREAD = 'unknown';
 
-type Facets = Record<string, Set<string>>;
-
-/** Nearest-rank percentile. */
-function percentile(values: number[], p: number): number | null {
-  if (!values.length) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1))]!;
-}
-
 export function TraceExplorer({
   traces,
   runs,
@@ -110,15 +97,9 @@ export function TraceExplorer({
   const [view, setView] = useState<View>('traces');
   const [range, setRange] = useState<Range>('7d');
   const [query, setQuery] = useState('');
-  const [facets, setFacets] = useState<Facets>({});
+  const { facets, toggle: toggleFacet, clear: clearFacets } = useFacets();
   const [sidebar, setSidebar] = useState(true);
-  const [columns, setColumns] = useState<Record<View, string[]>>(readColumns);
-  const setViewColumns = (v: View, ids: string[]) =>
-    setColumns((prev) => {
-      const next = { ...prev, [v]: ids };
-      writeColumns(next);
-      return next;
-    });
+  const { columns, set: setViewColumns, reset: resetColumns } = useColumns<View>('trace-explorer-columns', DEFAULT_COLUMNS);
 
   const since = now - RANGES.find((r) => r.id === range)!.ms;
   const q = query.trim().toLowerCase();
@@ -156,33 +137,19 @@ export function TraceExplorer({
       r.start >= since && (!q || [r.name, r.traceName, r.path].some((s) => s?.toLowerCase().includes(q)))
   );
 
-  const passes = (keys: Record<string, string[]>) =>
-    Object.entries(facets).every(([facet, picked]) => !picked.size || (keys[facet] ?? []).some((k) => picked.has(k)));
+  const passes = (keys: Record<string, string[]>) => passesFacets(facets, keys);
 
   const shownTraces = tracesInScope.filter((t) => passes(traceKeys(t)));
   const shownRuns = runsInScope.filter((r) => passes(runKeys(r)));
 
   // Facet values and counts come from what's in scope (time, search, thread) before facets apply.
   const facetSource = view === 'runs' ? runsInScope.map(runKeys) : tracesInScope.map(traceKeys);
-  const facetGroups: { id: string; title: string; label: (v: string) => string }[] = [
+  const facetGroups: FacetGroup[] = [
     { id: 'status', title: 'Status', label: (v) => STATUS_LABEL[v] ?? v },
     { id: 'type', title: 'Type', label: (v) => TYPE_LABEL[v] ?? v },
     { id: 'model', title: 'Model', label: (v) => v },
     { id: 'tool', title: 'Tools', label: (v) => v },
   ];
-  const counts = (facet: string) => {
-    const m = new Map<string, number>();
-    for (const keys of facetSource) for (const k of keys[facet] ?? []) m.set(k, (m.get(k) ?? 0) + 1);
-    return [...m.entries()].sort((a, b) => b[1] - a[1]);
-  };
-  const toggleFacet = (facet: string, value: string, on: boolean) =>
-    setFacets((prev) => {
-      const next = new Set(prev[facet]);
-      if (on) next.add(value);
-      else next.delete(value);
-      return { ...prev, [facet]: next };
-    });
-  const activeFilters = Object.values(facets).reduce((a, s) => a + s.size, 0);
 
   // ── Threads ──
   const threadRows = [...groupBy(shownTraces, (t) => threadOf(t.threadId)).entries()]
@@ -201,7 +168,7 @@ export function TraceExplorer({
         context: [...replies].sort((a, b) => b.start - a.start)[0]?.contextUsed ?? null,
         peakMemMB: maxOf(items.map((t) => t.peakMemMB)),
         minHeadroomMB: minOf(items.map((t) => t.minHeadroomMB)),
-        thermalMax: items.map((t) => t.thermalMax).reduce<string | null>((a, b) => (b && (!a || THERMAL_ORDER.indexOf(b) > THERMAL_ORDER.indexOf(a)) ? b : a), null),
+        thermalMax: items.map((t) => t.thermalMax).reduce<string | null>(hotter, null),
         models: [...new Set(items.map((t) => t.model).filter(Boolean))].join(', '),
       };
     })
@@ -364,42 +331,7 @@ export function TraceExplorer({
   return (
     <div className="flex items-start gap-4">
       {sidebar ? (
-        <aside aria-label="Filters" className="flex w-52 shrink-0 flex-col gap-5 duration-200 animate-in fade-in slide-in-from-left-1 motion-reduce:animate-none">
-          <div className="flex h-9 items-center justify-between">
-            <span className="text-sm font-semibold">Filters</span>
-            <span className="flex items-center gap-1">
-              {activeFilters ? (
-                <Button variant="ghost" size="xs" className="text-subtle-foreground hover:text-foreground" onClick={() => setFacets({})}>
-                  Clear
-                </Button>
-              ) : null}
-              <IconButton label="Hide filters" onClick={() => setSidebar(false)}>
-                <ChevronDoubleLeftIcon aria-hidden="true" />
-              </IconButton>
-            </span>
-          </div>
-          {facetGroups.map((g) => {
-            const values = counts(g.id);
-            if (!values.length) return null;
-            return (
-              <fieldset key={g.id} className="flex flex-col gap-1.5">
-                <legend className="mb-1.5 text-xs text-subtle-foreground">{g.title}</legend>
-                {values.map(([value, n]) => {
-                  const id = `facet-${g.id}-${value}`;
-                  return (
-                    <div key={value} className="flex items-center gap-2">
-                      <Checkbox id={id} checked={facets[g.id]?.has(value) ?? false} onCheckedChange={(v) => toggleFacet(g.id, value, v === true)} />
-                      <Label htmlFor={id} className="min-w-0 flex-1 cursor-pointer truncate font-normal">
-                        {g.label(value)}
-                      </Label>
-                      <span className="text-xs text-subtle-foreground tabular-nums">{n}</span>
-                    </div>
-                  );
-                })}
-              </fieldset>
-            );
-          })}
-        </aside>
+        <FacetSidebar groups={facetGroups} source={facetSource} facets={facets} onToggle={toggleFacet} onClear={clearFacets} onHide={() => setSidebar(false)} />
       ) : null}
 
       <div className="flex min-w-0 flex-1 flex-col gap-3">
@@ -432,7 +364,7 @@ export function TraceExplorer({
             defs={registry[view]}
             shown={columns[view]}
             onChange={(ids) => setViewColumns(view, ids)}
-            onReset={() => setViewColumns(view, DEFAULT_COLUMNS[view])}
+            onReset={() => resetColumns(view)}
           />
         </div>
 
@@ -490,103 +422,12 @@ export function TraceExplorer({
   );
 }
 
-// ── Columns ────────────────────────────────────────────────────────────────
-
-type ColumnDef<T> = {
-  id: string;
-  group: string;
-  label: string;
-  /** Shown in the Columns menu, to say what the number means. */
-  hint?: string;
-  col: Omit<Column<T>, 'key' | 'header'>;
-};
-
 const DEFAULT_COLUMNS: Record<View, string[]> = {
   traces: ['status', 'input', 'output', 'start', 'latency', 'ttft', 'speed', 'tokens', 'tools', 'peakMem', 'headroom', 'cpu', 'thermal'],
   threads: ['thread', 'replies', 'last', 'errors', 'p50', 'p95', 'tokens', 'peakMem', 'thermal'],
   runs: ['status', 'name', 'type', 'trace', 'start', 'latency', 'ttft', 'speed', 'tokens', 'file'],
 };
-const COLUMNS_KEY = 'trace-explorer-columns';
 
-function readColumns(): Record<View, string[]> {
-  try {
-    const saved = typeof window === 'undefined' ? null : JSON.parse(window.localStorage.getItem(COLUMNS_KEY) ?? 'null');
-    return { ...DEFAULT_COLUMNS, ...(saved ?? {}) };
-  } catch {
-    return DEFAULT_COLUMNS;
-  }
-}
-function writeColumns(value: Record<View, string[]>) {
-  try {
-    window.localStorage.setItem(COLUMNS_KEY, JSON.stringify(value));
-  } catch {
-    // private mode: not remembered
-  }
-}
-
-/** The shown columns, in the registry's order. */
-function pick<T>(defs: ColumnDef<T>[], shown: string[]): Column<T>[] {
-  return defs.filter((d) => shown.includes(d.id)).map((d) => ({ ...d.col, key: d.id, header: d.label }));
-}
-
-/** Pick columns, grouped (What happened, Model speed, Tokens, Agent, Device impact). */
-function ColumnsMenu({ defs, shown, onChange, onReset }: { defs: readonly Pick<ColumnDef<unknown>, 'id' | 'group' | 'label' | 'hint'>[]; shown: string[]; onChange: (ids: string[]) => void; onReset: () => void }) {
-  const groups = [...new Set(defs.map((d) => d.group))];
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline" size="sm">
-          <ViewColumnsIcon aria-hidden="true" />
-          Columns
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="flex max-h-[70vh] w-72 flex-col gap-4 overflow-y-auto p-3">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold">Columns</span>
-          <Button variant="ghost" size="xs" className="text-subtle-foreground hover:text-foreground" onClick={onReset}>
-            Reset
-          </Button>
-        </div>
-        {groups.map((g) => (
-          <fieldset key={g} className="flex flex-col gap-1.5">
-            <legend className="mb-1.5 text-xs text-subtle-foreground">{g}</legend>
-            {defs
-              .filter((d) => d.group === g)
-              .map((d) => {
-                const id = `col-${d.id}`;
-                const on = shown.includes(d.id);
-                return (
-                  <div key={d.id} className="flex items-start gap-2">
-                    <Checkbox
-                      id={id}
-                      className="mt-0.5"
-                      checked={on}
-                      onCheckedChange={(v) => onChange(v === true ? [...shown, d.id] : shown.filter((x) => x !== d.id))}
-                    />
-                    <Label htmlFor={id} className="flex min-w-0 cursor-pointer flex-col items-start gap-0 font-normal">
-                      <span>{d.label}</span>
-                      {d.hint ? <span className="text-xs text-subtle-foreground">{d.hint}</span> : null}
-                    </Label>
-                  </div>
-                );
-              })}
-          </fieldset>
-        ))}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-/** Lets a wide table scroll sideways inside the page instead of squeezing its columns. */
-function WideTable({ children }: { children: ReactNode }) {
-  return (
-    <div className="-mx-1 overflow-x-auto px-1 pb-1 [scrollbar-width:thin]">
-      <div className="w-max min-w-full">{children}</div>
-    </div>
-  );
-}
-
-const THERMAL_ORDER = ['nominal', 'fair', 'light', 'moderate', 'serious', 'severe', 'critical', 'emergency', 'shutdown'];
 const maxOf = (xs: (number | null)[]) => {
   const v = xs.filter((x): x is number => x !== null);
   return v.length ? Math.max(...v) : null;
@@ -600,17 +441,4 @@ function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
   const m = new Map<string, T[]>();
   for (const item of items) m.set(key(item), [...(m.get(key(item)) ?? []), item]);
   return m;
-}
-
-function IconButton({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label={label} onClick={onClick} className="text-subtle-foreground hover:text-foreground">
-          {children}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  );
 }

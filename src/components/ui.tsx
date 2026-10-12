@@ -130,11 +130,16 @@ export function DeviceReadings({ sample, platform, stale = false }: { sample: Me
   ];
   if (isNum(sample.powerW)) items.push(['Power', `${fmtNum(sample.powerW, 2)} W`]);
   if (sample.lowPowerMode) items.push(['Low Power Mode', 'On']);
+  return <Readings items={items} stale={stale} label={stale ? 'Last readings' : 'Current readings'} />;
+}
+
+/** A row of labelled numbers split by hairlines: sits beside a page title (a device's readings, an eval's pass rates). */
+export function Readings({ items, label, stale = false }: { items: [string, ReactNode][]; label: string; stale?: boolean }) {
   return (
-    <dl className={cn('flex flex-wrap items-stretch transition-opacity duration-200 motion-reduce:transition-none', stale && 'opacity-60')} aria-label={stale ? 'Last readings' : 'Current readings'}>
-      {items.map(([label, value]) => (
-        <div key={label} className="flex min-w-24 flex-col gap-1 px-4 first:pl-0 last:pr-0 not-last:hairline-r">
-          <dt className="text-xs text-subtle-foreground">{label}</dt>
+    <dl className={cn('flex flex-wrap items-stretch transition-opacity duration-200 motion-reduce:transition-none', stale && 'opacity-60')} aria-label={label}>
+      {items.map(([name, value]) => (
+        <div key={name} className="flex min-w-24 flex-col gap-1 px-4 first:pl-0 last:pr-0 not-last:hairline-r">
+          <dt className="text-xs text-subtle-foreground">{name}</dt>
           <dd className="flex h-6 items-center text-sm font-medium tabular-nums">{value}</dd>
         </div>
       ))}

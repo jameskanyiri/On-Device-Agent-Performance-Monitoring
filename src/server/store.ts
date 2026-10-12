@@ -84,7 +84,14 @@ export function sessionList() {
       const runsDir = join(DATA_DIR, id, 'runs');
       const done = existsSync(runsDir) ? readdirSync(runsDir).filter((f) => f.endsWith('.json')).length : 0;
       const total = manifest.models.length * manifest.scenarios.length * manifest.tasks.length * manifest.reps;
-      return { id, suite: manifest.suite, startedAt: manifest.startedAt, models: manifest.models, scenarios: manifest.scenarios, reps: manifest.reps, done, total };
+      // Pass rate per scenario, from the runs so far.
+      const suite = SUITES[manifest.suite] ?? [];
+      const scored = done ? loadRuns(join(DATA_DIR, id)).map((run) => scoreRun(run, suite)) : [];
+      const passRates = manifest.scenarios.map((sid) => {
+        const rs = scored.filter((r) => r.run.scenarioId === sid);
+        return { scenarioId: sid, label: SCENARIOS.find((s) => s.id === sid)?.label ?? sid, runs: rs.length, passed: rs.filter((r) => r.check.pass).length };
+      });
+      return { id, suite: manifest.suite, startedAt: manifest.startedAt, models: manifest.models, scenarios: manifest.scenarios, reps: manifest.reps, done, total, passRates };
     })
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 }

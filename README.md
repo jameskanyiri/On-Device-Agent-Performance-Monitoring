@@ -31,7 +31,7 @@ Overview page (e.g. `http://192.168.1.10:8787`).
 |---|---|
 | `/` Overview | Each phone's live memory, headroom, CPU, thermal state, battery and power, plus what it's running; benchmark sessions; traced chats |
 | `/live/<device>` | The last 10 minutes of device metrics |
-| `/bench` | Start or stop a benchmark (models × scenarios × tasks × repeats) and follow its log |
+| `/evals` | Evals (benchmarks): start or stop one (models × scenarios × tasks × repeats), follow it, and every past session with its pass rate per scenario |
 | `/sessions/<id>` | Pass rate and metrics per scenario, impact against the bare model, pass rate by task, every run |
 | `/sessions/<id>/runs/<job>` and `/chats/<id>` | One trace: timeline, device lanes, conversation, files |
 

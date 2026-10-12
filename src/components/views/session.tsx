@@ -76,7 +76,7 @@ export function SessionView({ id }: { id: string }) {
 
   return (
     <Page
-      back={{ href: '/traces', label: 'Traces' }}
+      back={{ href: '/evals', label: 'Evals' }}
       title={`Benchmark: ${manifest.suite}`}
       description={`${fmtDate(manifest.startedAt)} · ${manifest.models.join(', ')} · ${runs.length} of ${total} runs · ${manifest.reps} ${manifest.reps === 1 ? 'repeat' : 'repeats'}`}>
       {manifest.models.map((model) => {

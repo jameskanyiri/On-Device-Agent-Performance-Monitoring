@@ -12,8 +12,8 @@ import { Frame, FrameBody, FrameHeader } from '@/ui/frame';
 import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
 import { Shimmer } from '@/ui/shimmer';
-import { fmtClock, fmtDur } from '../format';
-import { Chip, ErrorState, LoadingState, Page, Section, TextFrame } from '../ui';
+import { fmtClock, fmtDate, fmtDur } from '../format';
+import { Chip, ErrorState, LoadingState, Page, Section, Table, TextFrame } from '../ui';
 import { usePoll } from '../use-poll';
 
 type BenchState = {
@@ -34,28 +34,88 @@ type BenchState = {
   options: { suites: Record<string, { id: string; title: string }[]>; scenarios: Scenario[] };
 };
 
-/** Start a benchmark and follow it. The phone picks jobs up from its Benchmark screen. */
+type SessionRow = {
+  id: string;
+  suite: string;
+  startedAt: string;
+  models: string[];
+  reps: number;
+  done: number;
+  total: number;
+  passRates: { scenarioId: string; label: string; runs: number; passed: number }[];
+};
+
+/**
+ * Evals: the same fixed tasks run with agent features off and on, scored
+ * automatically, with what each run cost the phone. Start one, follow it, and
+ * compare past sessions. The phone takes jobs from Settings → Dashboard → Connect.
+ */
 export function BenchView() {
   const { data, error } = usePoll<BenchState>('/api/bench', 2000);
+  const { data: sessions } = usePoll<{ sessions: SessionRow[] }>('/api/sessions', 5000);
   if (error && !data) return <ErrorState error={error} />;
   if (!data) return <LoadingState />;
   const { now, active, session, log, options } = data;
+  const rows = sessions?.sessions ?? [];
 
   return (
     <Page
-      title="Benchmark"
-      description="Runs every task under each scenario on the phone, each from a fresh model session, with device metrics. Keep the phone on Settings → Benchmark, connected to this dashboard.">
+      title="Evals"
+      description="Fixed tasks run on the phone with features switched off and on (e.g. the bare model vs. file tools), each from a fresh model session, scored automatically, with what each run cost the device. On the phone: Settings → Dashboard → Connect.">
       {session ? <Progress session={session} active={active} now={now} /> : null}
+
+      <Section title="Sessions" meta={rows.length ? `${rows.length}` : undefined}>
+        <Table
+          label="Eval sessions"
+          rows={rows}
+          rowId={(r) => r.id}
+          rowLabel={(r) => r.id}
+          href={(r) => `/sessions/${encodeURIComponent(r.id)}`}
+          empty="No evals yet. Start one below."
+          columns={[
+            { key: 'started', header: 'Started', primary: true, width: 'w-44', cell: (r) => <span className="truncate">{fmtDate(r.startedAt)}</span> },
+            {
+              key: 'pass',
+              header: 'Pass rate',
+              cell: (r) =>
+                r.done ? (
+                  <span className="flex min-w-0 flex-wrap gap-1.5">
+                    {r.passRates.map((p) => (
+                      <Chip key={p.scenarioId}>
+                        {p.label} <span className="ml-1 text-foreground tabular-nums">{p.runs ? `${Math.round((p.passed / p.runs) * 100)}%` : '–'}</span>
+                      </Chip>
+                    ))}
+                  </span>
+                ) : (
+                  <span className="text-subtle-foreground">No runs yet</span>
+                ),
+            },
+            { key: 'suite', header: 'Suite', width: 'w-28', cell: (r) => <span className="truncate text-muted-foreground">{r.suite}</span> },
+            { key: 'models', header: 'Model', width: 'w-32', cell: (r) => <span className="truncate text-muted-foreground">{r.models.join(', ')}</span> },
+            {
+              key: 'runs',
+              header: 'Runs',
+              width: 'w-28',
+              align: 'end',
+              cell: (r) => (
+                <span className={r.done < r.total && r.id !== session?.sessionId ? 'text-subtle-foreground' : undefined}>
+                  {r.done} / {r.total}
+                </span>
+              ),
+            },
+          ]}
+        />
+      </Section>
+
       {!active ? <NewBenchmark options={options} /> : null}
-      <Section title="Log" meta={log.length ? `${log.length} lines` : undefined}>
-        {log.length ? (
-          <TextFrame label="Benchmark log" mono>
+
+      {log.length ? (
+        <Section title="Log" meta={`${log.length} lines`}>
+          <TextFrame label={session ? session.sessionId : 'Eval log'} mono>
             {log.map((l) => `${fmtClock(l.t)}  ${l.line}`).join('\n')}
           </TextFrame>
-        ) : (
-          <p className="text-sm text-muted-foreground">Nothing yet</p>
-        )}
-      </Section>
+        </Section>
+      ) : null}
     </Page>
   );
 }
@@ -153,11 +213,11 @@ function NewBenchmark({ options }: { options: BenchState['options'] }) {
     });
     const json = await res.json().catch(() => ({}));
     setBusy(false);
-    if (!res.ok) setMessage(json.error ?? 'Couldn’t start the benchmark');
+    if (!res.ok) setMessage(json.error ?? 'Couldn’t start the eval');
   };
 
   return (
-    <Section title="New benchmark">
+    <Section title="New eval">
       <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1.6fr]">
         <PickFrame title="Models">
           {MODELS.map((m) => (
@@ -211,7 +271,7 @@ function NewBenchmark({ options }: { options: BenchState['options'] }) {
           )}
           <Button onClick={start} disabled={busy || !models.size || !scenarios.size}>
             <PlayIcon aria-hidden="true" />
-            Start benchmark
+            Start eval
           </Button>
         </div>
       </div>

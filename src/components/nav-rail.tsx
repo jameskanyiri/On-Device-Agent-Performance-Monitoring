@@ -1,7 +1,7 @@
 'use client';
 
-import { HomeIcon as HomeOutline, MoonIcon, QueueListIcon as QueueListOutline, SunIcon } from '@heroicons/react/24/outline';
-import { HomeIcon as HomeSolid, QueueListIcon as QueueListSolid } from '@heroicons/react/24/solid';
+import { BeakerIcon as BeakerOutline, HomeIcon as HomeOutline, MoonIcon, QueueListIcon as QueueListOutline, SunIcon } from '@heroicons/react/24/outline';
+import { BeakerIcon as BeakerSolid, HomeIcon as HomeSolid, QueueListIcon as QueueListSolid } from '@heroicons/react/24/solid';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -18,8 +18,16 @@ const ITEMS: Item[] = [
     label: 'Traces',
     icon: QueueListOutline,
     activeIcon: QueueListSolid,
-    // Devices, their traces and benchmark sessions all open from Traces.
-    match: (p) => p.startsWith('/traces') || p.startsWith('/chats') || p.startsWith('/sessions') || p.startsWith('/bench'),
+    // Devices and their traces open from Traces.
+    match: (p) => p.startsWith('/traces') || p.startsWith('/chats'),
+  },
+  {
+    href: '/evals',
+    label: 'Evals',
+    icon: BeakerOutline,
+    activeIcon: BeakerSolid,
+    // Eval sessions and their runs open from Evals.
+    match: (p) => p.startsWith('/evals') || p.startsWith('/sessions') || p.startsWith('/bench'),
   },
 ];
 

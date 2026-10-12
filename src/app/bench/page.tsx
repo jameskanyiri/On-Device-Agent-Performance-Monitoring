@@ -1,5 +1,6 @@
-import { BenchView } from '@/components/views/bench';
+import { redirect } from 'next/navigation';
 
+// Benchmarks live under Evals now.
 export default function Page() {
-  return <BenchView />;
+  redirect('/evals');
 }

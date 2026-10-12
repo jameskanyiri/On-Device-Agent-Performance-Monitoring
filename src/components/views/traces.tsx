@@ -2,18 +2,16 @@
 
 import { ClockIcon } from '@heroicons/react/20/solid';
 
-import { ago, fmtDate, fmtDur, fmtMB, fmtPct } from '../format';
-import { Chip, ErrorState, LiveChip, LoadingState, Page, Section, Table } from '../ui';
+import { ago, fmtDur, fmtMB, fmtPct } from '../format';
+import { Chip, ErrorState, LiveChip, LoadingState, Page, Table } from '../ui';
 import { usePoll } from '../use-poll';
 import { osLabel, type DeviceRow } from './home';
 
 type Devices = { now: number; retentionDays: number; devices: DeviceRow[] };
-type Sessions = { sessions: { id: string; suite: string; startedAt: string; models: string[]; done: number; total: number }[] };
 
 /** Traces: every device seen; open one for its traces. */
 export function TracesView() {
   const { data, error } = usePoll<Devices>('/api/devices', 5000);
-  const { data: bench } = usePoll<Sessions>('/api/sessions', 15_000);
   if (error && !data) return <ErrorState error={error} />;
   if (!data) return <LoadingState />;
 
@@ -55,23 +53,6 @@ export function TracesView() {
         ]}
       />
 
-      {bench?.sessions.length ? (
-        <Section title="Benchmark sessions" meta={`${bench.sessions.length}`}>
-          <Table
-            label="Benchmark sessions"
-            rows={bench.sessions}
-            rowId={(r) => r.id}
-            rowLabel={(r) => r.id}
-            href={(r) => `/sessions/${encodeURIComponent(r.id)}`}
-            columns={[
-              { key: 'started', header: 'Started', primary: true, cell: (r) => <span className="truncate">{fmtDate(r.startedAt)}</span> },
-              { key: 'suite', header: 'Suite', width: 'w-32', cell: (r) => <span className="truncate">{r.suite}</span> },
-              { key: 'models', header: 'Models', cell: (r) => <span className="truncate">{r.models.join(', ')}</span> },
-              { key: 'runs', header: 'Runs', width: 'w-24', align: 'end', cell: (r) => `${r.done} / ${r.total}` },
-            ]}
-          />
-        </Section>
-      ) : null}
     </Page>
   );
 }

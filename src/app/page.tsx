@@ -1,7 +1,5 @@
-export default function Home() {
-  return (
-    <main>
-      <div>Hello world!</div>
-    </main>
-  );
+import { HomeView } from '@/components/views/home';
+
+export default function Page() {
+  return <HomeView />;
 }

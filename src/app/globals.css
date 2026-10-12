@@ -1,0 +1,254 @@
+/* Design tokens and utilities from Shift (Shift/shift-desktop-app/src/renderer/styles/globals.css),
+   with the observability additions marked below. Follow Shift's design skill
+   (Shift/docs/skills/shift-design) when changing the UI. */
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* shadcn/ui neutral theme tokens. `.light` (like `.dark`) forces a theme on a subtree, e.g. the
+   appearance previews in Settings. */
+:root,
+.light {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+
+  /* The Shift surface language: a tinted tray holding a white card, edged with hairlines
+     (see shared/ui/frame.tsx). */
+  --surface: #fafafa;
+  --hairline: #e6e8ec;
+  --subtle-foreground: #a1a1a1;
+  --success: #15a06a;
+  /* Task types (the dot before "Action", "Communicate", …): colour that names a category. */
+  --kind-action: #3b82f6;
+  --kind-communicate: #f97316;
+  --kind-review: #8b5cf6;
+  --kind-follow-up: #14b8a6;
+  /* Template types (Note, Document, Form chips). */
+  --type-note: #2563eb;
+  --type-document: #9333ea;
+  --type-form: #d97706;
+  /* Elevation, three steps. No CSS borders as edges.
+     edge: controls (inputs, selects, buttons): the ring and a barely-there drop.
+     frame: surfaces (frames, cards, the panel): the ring and two soft drops.
+     float: dialogs, popovers, menus: the ring and one wide, soft drop. */
+  --edge-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.1), 0 0.5px 1px rgb(0 0 0 / 0.03);
+  --frame-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.07), 0 1px 2px rgb(0 0 0 / 0.03), 0 2px 4px rgb(0 0 0 / 0.015);
+  --float-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.08), 0 8px 24px rgb(0 0 0 / 0.07);
+  --invalid-shadow: 0 0 0 1px rgb(220 38 38 / 0.5);
+
+  /* Observability (on-device dashboard): heat levels and the timeline's span kinds. */
+  --warning: #d97706;
+  --serious: #ea580c;
+  --span-load: var(--kind-action);
+  --span-turn: var(--kind-follow-up);
+  --span-generation: var(--kind-communicate);
+  --span-tool: var(--kind-review);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+
+  --surface: #242424;
+  --hairline: #303030;
+  --subtle-foreground: #8a8a8a;
+  --success: #34d399;
+  --kind-action: #60a5fa;
+  --kind-communicate: #fb923c;
+  --kind-review: #a78bfa;
+  --kind-follow-up: #2dd4bf;
+  --type-note: #60a5fa;
+  --type-document: #c084fc;
+  --type-form: #fbbf24;
+  --edge-shadow: 0 0 0 0.5px rgb(255 255 255 / 0.12), 0 0.5px 1px rgb(0 0 0 / 0.3);
+  --frame-shadow: 0 0 0 0.5px rgb(255 255 255 / 0.1), 0 1px 2px rgb(0 0 0 / 0.3), 0 2px 4px rgb(0 0 0 / 0.2);
+  --float-shadow: 0 0 0 0.5px rgb(255 255 255 / 0.12), 0 8px 24px rgb(0 0 0 / 0.45);
+  --invalid-shadow: 0 0 0 1px rgb(248 113 113 / 0.55);
+
+  --warning: #fbbf24;
+  --serious: #fb923c;
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-surface: var(--surface);
+  --color-hairline: var(--hairline);
+  --color-subtle-foreground: var(--subtle-foreground);
+  --color-success: var(--success);
+  --color-kind-action: var(--kind-action);
+  --color-kind-communicate: var(--kind-communicate);
+  --color-kind-review: var(--kind-review);
+  --color-kind-follow-up: var(--kind-follow-up);
+  --color-type-note: var(--type-note);
+  --color-type-document: var(--type-document);
+  --color-type-form: var(--type-form);
+  --shadow-edge: var(--edge-shadow);
+  --shadow-frame: var(--frame-shadow);
+  --shadow-float: var(--float-shadow);
+  --shadow-invalid: var(--invalid-shadow);
+  --color-warning: var(--warning);
+  --color-serious: var(--serious);
+}
+
+/* Dense UI text app-wide: `text-sm` is 13 px (Linear's size), not Tailwind's 14 px. */
+@theme {
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+}
+
+/* Hairlines: 0.5 px (one device pixel on Retina) in the hairline colour. */
+@utility hairline {
+  border: 0.5px solid var(--color-hairline);
+}
+@utility hairline-t {
+  border-top: 0.5px solid var(--color-hairline);
+}
+@utility hairline-b {
+  border-bottom: 0.5px solid var(--color-hairline);
+}
+@utility hairline-r {
+  border-right: 0.5px solid var(--color-hairline);
+}
+@utility hairline-l {
+  border-left: 0.5px solid var(--color-hairline);
+}
+/* A card inside a frame: its hairline sits on the frame's edge instead of inside it. */
+@utility frame-inset {
+  margin: 0 -0.5px -0.5px;
+}
+/* The same, for a card with a frame footer under it (only the sides sit on the edge). */
+@utility frame-inset-x {
+  margin: 0 -0.5px;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+/* A row that was just saved glows once and settles (patients list). One-shot, off with Reduce motion. */
+@theme {
+  --animate-row-highlight: row-highlight 1.8s ease-out;
+  @keyframes row-highlight {
+    from {
+      background-color: color-mix(in oklab, var(--success) 14%, transparent);
+    }
+    to {
+      background-color: transparent;
+    }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-row-highlight,
+  [data-highlight] {
+    animation: none;
+  }
+}
+
+/* Shimmer (shared/ui/shimmer.tsx): a band of full ink sweeping through a working label, in place of
+   a spinner beside it. A spinner says "something, somewhere, is happening"; a shimmer on the label
+   says *this* is what's happening, and costs no layout. It runs only while that work runs, pauses
+   while the window is hidden, and under Reduce motion holds the label's plain, legible colour.
+   The one animation here that isn't opacity or transform (the design skill allows it for working
+   text). It travels exactly one tile (200%) so the repeating gradient loops with no jump; 110deg
+   gives a slight sheen rather than a flat bar. */
+@keyframes text-shimmer {
+  to {
+    background-position: -200% center;
+  }
+}
+@utility animate-text-shimmer {
+  background-image: linear-gradient(
+    110deg,
+    var(--subtle-foreground) 0%,
+    var(--subtle-foreground) 40%,
+    var(--foreground) 50%,
+    var(--subtle-foreground) 60%,
+    var(--subtle-foreground) 100%
+  );
+  background-size: 200% 100%;
+  background-position: 0% center;
+  background-repeat: repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: text-shimmer 1.8s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-text-shimmer {
+    animation: none;
+    background-image: none;
+    color: var(--subtle-foreground);
+    -webkit-text-fill-color: var(--subtle-foreground);
+  }
+}
+
+/* The timeline's SVG text and marks (src/components/timeline.tsx). */
+.timeline-svg text {
+  fill: var(--subtle-foreground);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.timeline-svg .label-strong {
+  fill: var(--foreground);
+}

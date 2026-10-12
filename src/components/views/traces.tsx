@@ -7,7 +7,7 @@ import { Chip, ErrorState, LiveChip, LoadingState, Page, Section, Table } from '
 import { usePoll } from '../use-poll';
 import { osLabel, type DeviceRow } from './home';
 
-type Devices = { now: number; devices: DeviceRow[] };
+type Devices = { now: number; retentionDays: number; devices: DeviceRow[] };
 type Sessions = { sessions: { id: string; suite: string; startedAt: string; models: string[]; done: number; total: number }[] };
 
 /** Traces: every device seen; open one for its traces. */
@@ -18,7 +18,7 @@ export function TracesView() {
   if (!data) return <LoadingState />;
 
   return (
-    <Page title="Traces" description="Every device that has sent data, with its replies over the last 7 days. P50 is the typical reply time; P95 is the slow tail (95% of replies were faster). Open a device for its traces and live metrics.">
+    <Page title="Traces" description={`Every device that has sent data, with its replies over the last 7 days. P50 is the typical reply time; P95 is the slow tail (95% of replies were faster). Open a device for its traces and live metrics. Traces are kept ${data.retentionDays} days.`}>
       <Table
         label="Devices"
         rows={data.devices}

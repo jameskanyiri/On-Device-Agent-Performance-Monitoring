@@ -39,6 +39,15 @@ Start benchmarks from the terminal too:
 - `npm run bench -- --models gemma4-e2b --reps 3` starts a benchmark.
 - `npm run bench -- --stop` stops it.
 
+## Maintenance
+
+- `npm test`: unit tests (Vitest): the store's summaries, percentiles, threads,
+  retention and benchmark traces, and the trace explorer's filters and grouping.
+- `npm run sync-shared`: refresh `src/shared` from the app; `-- --check` exits 1 on
+  drift (run it in CI or before committing changes to either repo).
+- Retention: chat traces older than `TRACE_RETENTION_DAYS` (default 30) are deleted,
+  at most once an hour. Benchmark sessions are kept.
+
 ## Phone protocol
 
 These paths match the app's `src/bench/client.ts` and `src/observe/collector.ts`:
@@ -64,7 +73,7 @@ turns off with Reduce motion.
   conversion (`store.ts`), task suites with their checks (`suites/`), scenarios,
   metrics, and the `report.md` / `runs.csv` writer.
 - `src/shared/`: types copied from the app (trace format, benchmark protocol,
-  device metrics) and its model list. **Keep these in sync with `../on-device-ai`.**
+  device metrics) and its model list. Kept in sync with `../on-device-ai` by `npm run sync-shared`.
 - `src/components/`: the timeline (SVG in a frame), page scaffolding, stats and chips, and one view per page.
 - `src/ui/`, `src/lib/`: Shift's primitives and `cn`.
 - `data/` (git-ignored): benchmark sessions (`<session>/runs/*.json`, `report.md`)

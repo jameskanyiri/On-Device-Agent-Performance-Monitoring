@@ -2,7 +2,7 @@
 /*
  * Traces: what the agent did (spans) next to what it cost the phone (metric
  * samples), on one wall clock. Benchmark runs and everyday chat turns both end
- * up in this shape, and the Mac dashboard (bench/ui) draws it.
+ * up in this shape, and the Mac dashboard (on-device/dashboard) draws it.
  *
  * No React Native imports: the Mac side imports this file's types.
  */

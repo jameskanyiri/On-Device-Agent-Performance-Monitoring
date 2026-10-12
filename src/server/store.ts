@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { networkInterfaces } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -15,7 +15,7 @@ import { SUITES } from './suites';
 /*
  * Everything the dashboard stores, on disk under ./data:
  *   data/<session>/          benchmark sessions (manifest.json, runs/*.json, report.md)
- *   data/_chats/<id>.json    traced chat replies and model loads
+ *   data/_chats/<id>.json    traced chat replies and model loads (kept RETENTION_DAYS)
  * plus live heartbeats, kept in memory for the last 10 minutes.
  */
 
@@ -89,7 +89,33 @@ export function sessionList() {
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 }
 
+/** How long chat traces are kept (TRACE_RETENTION_DAYS, default 30). Benchmark sessions are kept. */
+export const RETENTION_DAYS = Number(process.env.TRACE_RETENTION_DAYS) > 0 ? Number(process.env.TRACE_RETENTION_DAYS) : 30;
+const PRUNE_EVERY_MS = 60 * 60_000;
+const gPrune = globalThis as typeof globalThis & { __onDeviceLastPrune?: number };
+
+/** Deletes chat traces older than the retention window; runs at most once an hour. */
+export function pruneOldTraces(now = Date.now(), force = false): number {
+  if (!force && now - (gPrune.__onDeviceLastPrune ?? 0) < PRUNE_EVERY_MS) return 0;
+  gPrune.__onDeviceLastPrune = now;
+  if (!existsSync(CHATS_DIR)) return 0;
+  const cutoff = now - RETENTION_DAYS * 24 * 60 * 60_000;
+  let removed = 0;
+  for (const f of readdirSync(CHATS_DIR)) {
+    if (!f.endsWith('.json')) continue;
+    const path = join(CHATS_DIR, f);
+    // File time is when the trace arrived, which is at or after when it happened.
+    if (statSync(path).mtimeMs < cutoff) {
+      rmSync(path);
+      removed++;
+    }
+  }
+  if (removed) console.log(`[store] removed ${removed} traces older than ${RETENTION_DAYS} days`);
+  return removed;
+}
+
 export function chatList(limit = 300) {
+  pruneOldTraces();
   if (!existsSync(CHATS_DIR)) return [];
   return readdirSync(CHATS_DIR)
     .filter((f) => f.endsWith('.json'))

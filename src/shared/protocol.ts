@@ -1,6 +1,6 @@
 // Copied from the mobile app (on-device-ai): src/bench/protocol.ts. Keep the two in sync.
 /*
- * What the Mac bench driver (bench/server.ts) and the phone (src/bench/runner.ts)
+ * What the Mac dashboard (on-device/dashboard, copied there as src/shared/protocol.ts) and the phone (src/bench/runner.ts)
  * exchange. Types only, so the Mac imports this file directly.
  *
  * Protocol (plain HTTP, the phone polls):

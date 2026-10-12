@@ -250,6 +250,8 @@ export function deviceList(): DeviceRow[] {
     rows.set(c.device.id, row);
   }
   for (const { beat } of live.values()) {
+    // Older app builds sent a few heartbeats before their device id had loaded.
+    if (beat.device.id === 'unknown') continue;
     const row = rows.get(beat.device.id) ?? empty(beat.device);
     row.device = beat.device;
     row.lastSeen = Math.max(row.lastSeen, beat.t);

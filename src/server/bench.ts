@@ -142,7 +142,7 @@ export function startBench(config: BenchConfig) {
         sessionId,
         modelId,
         scenario,
-        task: { id: task.id, files: task.files, turns: task.turns, systemPrompt: task.systemPrompt },
+        task: { id: task.id, files: task.files, turns: task.turns, systemPrompt: [scenario.systemPrompt, task.systemPrompt].filter(Boolean).join('\n\n') || undefined },
         rep,
         generation: { temperature: config.temperature ?? 0.2, maxNewTokens: config.maxNewTokens ?? 1024 },
         sampleIntervalMs: config.sampleMs ?? 500,

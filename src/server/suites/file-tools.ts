@@ -7,7 +7,7 @@ import { all, fileMatches, replyMatches, type Task } from '../checks';
  * cost (and whether the model calls them needlessly) on ordinary questions.
  */
 
-const NOTES = {
+export const NOTES = {
   '/notes/budget-sync.md':
     '# Budget sync — 1 Oct\n\n- Agreed marketing budget: $4,200 for Q4\n- Owner: Wanjiru\n- Next review: November\n',
   '/notes/health.md': '# Health\n\n- Dentist appointment on the 14th at 9am\n- Refill allergy meds\n',

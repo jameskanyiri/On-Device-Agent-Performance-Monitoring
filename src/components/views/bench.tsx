@@ -192,7 +192,7 @@ function NewBenchmark({ options }: { options: BenchState['options'] }) {
   const suiteNames = Object.keys(options.suites);
   const [suite, setSuite] = useState(suiteNames[0] ?? '');
   const [models, setModels] = useState<Set<string>>(() => new Set(['gemma4-e2b']));
-  const [scenarios, setScenarios] = useState<Set<string>>(() => new Set(options.scenarios.map((s) => s.id)));
+  const [scenarios, setScenarios] = useState<Set<string>>(() => new Set(['baseline']));
   const [tasks, setTasks] = useState<Set<string>>(() => new Set());
   const [reps, setReps] = useState('3');
   const [timeoutS, setTimeoutS] = useState('240');

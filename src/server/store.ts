@@ -8,6 +8,7 @@ import { join, resolve } from 'node:path';
 import type { MetricSample } from '@/shared/device-metrics';
 import type { RunResult } from '@/shared/protocol';
 import type { LiveBeat, Span, Trace, TraceDevice } from '@/shared/trace';
+import { runReading } from './reading';
 import { loadRuns, scoreRun, type Manifest } from './report';
 import { SCENARIOS } from './scenarios';
 import { SUITES } from './suites';
@@ -386,8 +387,16 @@ export function runToTrace(run: RunResult): Trace {
       start: turn.startedAt,
       end: turn.endedAt,
       status: turn.finishReason === 'timeout' ? 'timeout' : turn.finishReason === 'error' ? 'error' : 'ok',
-      attrs: { prompt: clip(turn.prompt), reply: clip(turn.reply), finishReason: turn.finishReason, kvPosAfter: turn.kvPosAfter ?? null },
+      attrs: {
+        prompt: clip(turn.prompt),
+        reply: clip(turn.reply),
+        finishReason: turn.finishReason,
+        kvPosBefore: turn.kvPosBefore ?? null,
+        kvPosAfter: turn.kvPosAfter ?? null,
+        firstTokenWallMs: turn.firstTokenWallMs ?? null,
+      },
     });
+    const reading = runReading(run)[turn.index];
     turn.generations.forEach((gen, i) =>
       add({
         parentId: turnId,
@@ -401,6 +410,8 @@ export function runToTrace(run: RunResult): Trace {
           generatedTokens: gen.generatedTokens,
           ttftMs: gen.ttftMs,
           prefillMs: gen.prefillMs ?? null,
+          readTokens: reading?.calls[i]?.tokens ?? null,
+          readMs: reading?.calls[i]?.ms ?? null,
           tokensPerSec: gen.decodeMs > 0 ? Math.round((gen.generatedTokens / (gen.decodeMs / 1000)) * 10) / 10 : null,
         },
       })
@@ -468,11 +479,23 @@ export function traceSummary(trace: Trace) {
   };
 }
 
-/** Prompt tokens read per second in one model call (prefill time, else time to first token). */
+/** Prompt tokens read per second in one model call. Needs the app's readTokens/readMs (see reading.ts); older traces have none. */
 export function readSpeed(attrs: Record<string, unknown> | undefined): number | null {
-  const p = attrs?.promptTokens;
-  const ms = typeof attrs?.prefillMs === 'number' ? attrs.prefillMs : attrs?.ttftMs;
+  const p = attrs?.readTokens;
+  const ms = attrs?.readMs;
   return typeof p === 'number' && p > 0 && typeof ms === 'number' && ms > 0 ? p / (ms / 1000) : null;
+}
+
+/** The wait from sending to the first word: measured by the app, else reading + first token of the first call. */
+export function firstTokenWait(trace: Trace): number | null {
+  const num = (v: unknown) => (typeof v === 'number' ? v : null);
+  const turn = trace.spans.find((s) => s.kind === 'turn');
+  const wall = num(trace.attrs?.firstTokenWallMs) ?? num(turn?.attrs?.firstTokenWallMs);
+  if (wall !== null) return wall;
+  const first = trace.spans.filter((s) => s.kind === 'generation').sort((a, b) => a.start - b.start)[0];
+  if (!first) return null;
+  const ttft = num(first.attrs?.ttftMs);
+  return num(first.attrs?.readMs) ?? (ttft === null ? null : ttft + (num(first.attrs?.prefillMs) ?? 0));
 }
 
 /** How fast the model was in a trace: first token, decode speed, prompt size, context. */
@@ -491,22 +514,23 @@ function modelSpeed(trace: Trace) {
       decodeS += n / tps;
     }
   }
-  // Reading speed: prompt tokens over prefill time (or time to first token where prefill isn't reported).
+  // Reading speed: tokens read over reading time, for calls where both are known.
   let read = 0;
   let readS = 0;
   for (const g of gens) {
-    const p = num(g.attrs?.promptTokens);
-    const ms = num(g.attrs?.prefillMs) ?? num(g.attrs?.ttftMs);
+    const p = num(g.attrs?.readTokens);
+    const ms = num(g.attrs?.readMs);
     if (p && ms) {
       read += p;
       readS += ms / 1000;
     }
   }
   return {
-    firstTokenMs: first ? num(first.attrs?.ttftMs) : null,
+    firstTokenMs: first ? firstTokenWait(trace) : null,
     decodeTps: decodeS > 0 ? tokens / decodeS : null,
     readTps: readS > 0 ? read / readS : null,
-    promptTokens: gens.reduce((a, g) => a + (num(g.attrs?.promptTokens) ?? 0), 0) || null,
+    // Tokens read: the app's count from context growth; older traces only have the runtime's (too low).
+    promptTokens: num(trace.attrs?.readTokens) ?? (gens.reduce((a, g) => a + (num(g.attrs?.promptTokens) ?? 0), 0) || null),
     contextUsed: num(trace.attrs?.kvPos),
   };
 }
@@ -579,8 +603,8 @@ function deviceRuns(deviceId: string, limit = 3000) {
         durationMs: (sp.end ?? sp.start) - sp.start,
         status: sp.status ?? 'ok',
         tokens: typeof sp.attrs?.generatedTokens === 'number' ? sp.attrs.generatedTokens : null,
-        promptTokens: typeof sp.attrs?.promptTokens === 'number' ? sp.attrs.promptTokens : null,
-        firstTokenMs: typeof sp.attrs?.ttftMs === 'number' ? sp.attrs.ttftMs : null,
+        promptTokens: typeof sp.attrs?.readTokens === 'number' ? sp.attrs.readTokens : typeof sp.attrs?.promptTokens === 'number' ? sp.attrs.promptTokens : null,
+        firstTokenMs: typeof sp.attrs?.readMs === 'number' ? sp.attrs.readMs : typeof sp.attrs?.ttftMs === 'number' ? sp.attrs.ttftMs : null,
         resultChars: typeof sp.attrs?.resultChars === 'number' ? sp.attrs.resultChars : null,
         tokensPerSec: typeof sp.attrs?.tokensPerSec === 'number' ? sp.attrs.tokensPerSec : null,
         readTps: readSpeed(sp.attrs),

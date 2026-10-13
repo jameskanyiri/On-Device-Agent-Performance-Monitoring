@@ -29,6 +29,8 @@ function run(over: Partial<RunResult> = {}): RunResult {
         finishReason: 'stop',
         startedAt: 2000,
         endedAt: 10_000,
+        kvPosBefore: 50,
+        kvPosAfter: 400,
         generations: [{ promptTokens: 200, generatedTokens: 100, ttftMs: 600, prefillMs: 500, decodeMs: 5000, inferenceStartMs: 2000, inferenceEndMs: 7600 }],
       },
     ],
@@ -50,11 +52,14 @@ function run(over: Partial<RunResult> = {}): RunResult {
 describe('summarizeRun', () => {
   it('splits time into reading, writing and the rest, and gives reading speed', () => {
     const m = summarizeRun(run());
-    expect(m.prefillS).toBe(0.5);
-    expect(m.prefillTps).toBe(400);
+    // Reading = separate prefill (500 ms) + time to first token (600 ms).
+    expect(m.prefillS).toBeCloseTo(1.1);
+    // Read = context growth (400 − 50) − written (100) = 250 tokens, not the runtime's 200.
+    expect(m.promptTokens).toBe(250);
+    expect(m.prefillTps).toBeCloseTo(250 / 1.1);
     expect(m.decodeS).toBe(5);
     expect(m.turnS).toBe(8);
-    expect(m.otherS).toBeCloseTo(2.5);
+    expect(m.otherS).toBeCloseTo(1.9);
   });
 
   it('counts time in each thermal level and when the phone first warmed up', () => {
@@ -78,9 +83,15 @@ describe('summarizeRun', () => {
     expect(m.temperature).toBe(0);
   });
 
-  it('falls back to time to first token where the runtime gives no prefill time', () => {
+  it('uses the load’s context size for the first turn when the turn has none', () => {
+    const r = run({ load: { sessionCreateMs: 1000, initTokens: 100, maxSeqLen: 2048 } });
+    delete r.turns[0]!.kvPosBefore;
+    expect(summarizeRun(r).promptTokens).toBe(200);
+  });
+
+  it('has no reading speed without context sizes', () => {
     const r = run();
-    delete r.turns[0]!.generations[0]!.prefillMs;
-    expect(summarizeRun(r).prefillS).toBe(0.6);
+    delete r.turns[0]!.kvPosAfter;
+    expect(summarizeRun(r).prefillTps).toBeUndefined();
   });
 });

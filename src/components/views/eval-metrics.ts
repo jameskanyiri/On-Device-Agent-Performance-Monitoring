@@ -31,7 +31,7 @@ export const EVAL_METRICS: EvalMetric[] = [
   { key: 'loadS', group: 'Model speed', label: 'Model load', fmt: secs, lowerIsBetter: true },
   { key: 'modelCalls', group: 'Tokens & agent', label: 'Model calls', fmt: (v) => fmtNum(v, 1), lowerIsBetter: true },
   { key: 'initTokens', group: 'Tokens & agent', label: 'Prompt tokens at start', hint: 'System prompt + tool definitions', fmt: (v) => fmtNum(v), lowerIsBetter: true },
-  { key: 'promptTokens', group: 'Tokens & agent', label: 'Prompt tokens read', hint: 'Every model call, tool results included', fmt: (v) => fmtNum(v), lowerIsBetter: true },
+  { key: 'promptTokens', group: 'Tokens & agent', label: 'Tokens read', hint: 'Messages and tool results the model read (context growth minus what it wrote)', fmt: (v) => fmtNum(v), lowerIsBetter: true },
   { key: 'generatedTokens', group: 'Tokens & agent', label: 'Tokens out', fmt: (v) => fmtNum(v), lowerIsBetter: true },
   { key: 'kvPeak', group: 'Tokens & agent', label: 'Context used', hint: 'Most tokens in the model’s memory', fmt: (v) => fmtNum(v), lowerIsBetter: true },
   { key: 'toolCalls', group: 'Tokens & agent', label: 'Tool calls', fmt: (v) => fmtNum(v, 1) },

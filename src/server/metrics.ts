@@ -1,5 +1,6 @@
 import type { RunResult } from '@/shared/protocol';
 import type { MetricSample } from '@/shared/device-metrics';
+import { runReading } from './reading';
 
 /** Thermal states from coolest to hottest, per platform. */
 const THERMAL_RANK: Record<string, number> = {
@@ -103,9 +104,10 @@ const LEVEL_KEYS = ['thermalNominalS', 'thermalFairS', 'thermalModerateS', 'ther
 export function summarizeRun(run: RunResult): RunMetrics {
   const gens = run.turns.flatMap((t) => t.generations);
   const decodeS = sum(gens.map((g) => g.decodeMs)) / 1000;
-  // Prefill: the runtime's own figure when it reports one, else time to first token.
-  const prefillMs = gens.map((g) => g.prefillMs ?? g.ttftMs);
-  const prefillS = gens.length ? sum(prefillMs) / 1000 : undefined;
+  // Reading (prefill): tokens from context growth, time from the separate prefill + time to first token.
+  const reading = runReading(run);
+  const prefillS = gens.length ? sum(reading.map((r) => r.ms)) / 1000 : undefined;
+  const readTokens = reading.every((r) => r.tokens !== null) ? sum(reading.map((r) => r.tokens!)) : undefined;
   const generatedTokens = sum(gens.map((g) => g.generatedTokens));
   const { idleStart, loadStart, turnsEnd } = run.phases;
   const activeEnd = turnsEnd ?? run.endedAt;
@@ -178,7 +180,8 @@ export function summarizeRun(run: RunResult): RunMetrics {
   const powerPeak = nums(active.map((s) => s.powerW));
   const powerActiveW = energyJ !== undefined && activeS ? energyJ / activeS : undefined;
   const decodeTps = decodeS > 0 ? generatedTokens / decodeS : undefined;
-  const promptTokens = sum(gens.map((g) => g.promptTokens));
+  // Tokens the model read: from context growth when known (the runtime's own count misses the user's message).
+  const promptTokens = readTokens ?? sum(gens.map((g) => g.promptTokens));
   const turnS = run.turns.length ? sum(run.turns.map((t) => t.endedAt - t.startedAt)) / 1000 : undefined;
   const toolS = sum(run.tools.map((t) => t.durationMs ?? 0)) / 1000;
   const start = run.start;
@@ -200,7 +203,7 @@ export function summarizeRun(run: RunResult): RunMetrics {
     generatedTokens,
     decodeTps,
     prefillS,
-    prefillTps: prefillS ? promptTokens / prefillS : undefined,
+    prefillTps: prefillS && readTokens !== undefined ? readTokens / prefillS : undefined,
     decodeS: gens.length ? decodeS : undefined,
     otherS: turnS !== undefined && prefillS !== undefined ? Math.max(0, turnS - prefillS - decodeS - toolS) : undefined,
     kvPeak: Math.max(0, ...run.turns.map((t) => t.kvPosAfter ?? 0)) || undefined,

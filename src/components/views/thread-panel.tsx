@@ -43,6 +43,13 @@ const isLoad = (t: Trace) => t.attrs?.kind === 'load';
 const steps = (t: Trace) => t.spans.filter((s) => s.kind === 'generation' || s.kind === 'tool').sort((a, b) => a.start - b.start);
 const tokensOut = (t: Trace) => steps(t).reduce((a, s) => a + (num(s.attrs?.generatedTokens) ?? 0), 0);
 const duration = (t: Trace) => (t.end ?? t.start) - t.start;
+/** Sent to the first word: measured by the app, else the first call's reading time (older traces: its prefill + time to first token). */
+export const firstWait = (t: Trace) => {
+  const turn = t.spans.find((s) => s.kind === 'turn');
+  const first = steps(t).find((s) => s.kind === 'generation');
+  const ttft = num(first?.attrs?.ttftMs);
+  return num(t.attrs?.firstTokenWallMs) ?? num(turn?.attrs?.firstTokenWallMs) ?? num(first?.attrs?.readMs) ?? (ttft === null ? null : ttft + (num(first?.attrs?.prefillMs) ?? 0));
+};
 
 /** The panel's size, remembered under `prefix`: expanded to full width, or a dragged width. */
 export function usePanelSize(prefix: string) {
@@ -436,7 +443,7 @@ function SummaryDetails({ traces, onSelect }: { traces: Trace[]; onSelect: (trac
             { key: 'input', header: 'You', primary: true, cell: (t) => <span className="truncate">{str(t.attrs?.input) ?? t.name}</span> },
             { key: 'status', header: 'Status', width: 'w-24', cell: (t) => <StatusChip status={t.status} /> },
             { key: 'latency', header: 'Latency', width: 'w-24', align: 'end', cell: (t) => fmtDur(duration(t)) },
-            { key: 'ttft', header: 'First token', width: 'w-28', align: 'end', cell: (t) => fmtDur(num(steps(t).find((s) => s.kind === 'generation')?.attrs?.ttftMs)) },
+            { key: 'ttft', header: 'First token', width: 'w-28', align: 'end', cell: (t) => fmtDur(firstWait(t)) },
             { key: 'tokens', header: 'Tokens', width: 'w-20', align: 'end', cell: (t) => fmtNum(tokensOut(t)) },
             { key: 'tools', header: 'Tools', width: 'w-20', align: 'end', cell: (t) => steps(t).filter((s) => s.kind === 'tool').length },
             { key: 'mem', header: 'Peak memory', width: 'w-28', align: 'end', cell: (t) => fmtMB(impact(t.samples).peakMB) },
@@ -477,7 +484,7 @@ function TurnDetails({ trace, number }: { trace: Trace; number: number | null })
 
       <StatGrid>
         <Stat label="Latency" value={fmtDur(duration(trace))} />
-        <Stat label="First token" value={fmtDur(num(gens[0]?.attrs?.ttftMs))} />
+        <Stat label="First token" value={fmtDur(firstWait(trace))} note="Sent to the first word" />
         <Stat label="Decode speed" value={decodeS > 0 ? `${fmtNum(tokens / decodeS, 1)} tok/s` : '–'} />
         <Stat label="Model calls" value={gens.length} />
         <Stat label="Tool calls" value={tools.length} />
@@ -558,9 +565,10 @@ export function StepDetails({ trace, span, within = 'turn' }: { trace: Trace; sp
   const cpu = cpuOver(window);
   const attrs = Object.entries(span.attrs ?? {}).filter(([, v]) => v !== null && v !== '');
   const isGen = span.kind === 'generation';
-  const promptTokens = num(span.attrs?.promptTokens);
-  const readMs = num(span.attrs?.prefillMs) ?? num(span.attrs?.ttftMs);
-  const readTps = promptTokens && readMs ? promptTokens / (readMs / 1000) : null;
+  // What this call read and how long reading took (the app's readTokens/readMs; see server/reading.ts).
+  const readTokens = num(span.attrs?.readTokens);
+  const readMs = num(span.attrs?.readMs);
+  const readTps = readTokens && readMs ? readTokens / (readMs / 1000) : null;
 
   return (
     <div className="flex flex-col gap-5">
@@ -577,10 +585,10 @@ export function StepDetails({ trace, span, within = 'turn' }: { trace: Trace; sp
       {isGen ? (
         <StatGrid>
           <Stat label="Duration" value={fmtDur(end - span.start)} />
-          <Stat label="First token" value={fmtDur(num(span.attrs?.ttftMs))} note="Reading the prompt + first word" />
+          <Stat label="First token" value={fmtDur(readMs ?? (num(span.attrs?.ttftMs) ?? 0) + (num(span.attrs?.prefillMs) ?? 0))} note="Reading the prompt + first word" />
           <Stat label="Decode speed" value={num(span.attrs?.tokensPerSec) !== null ? `${fmtNum(num(span.attrs?.tokensPerSec), 1)} tok/s` : '–'} />
-          <Stat label="Prompt tokens" value={fmtNum(num(span.attrs?.promptTokens))} note="Newly read this call" />
-          <Stat label="Reading speed" value={readTps !== null ? `${fmtNum(readTps)} tok/s` : '–'} note={num(span.attrs?.prefillMs) !== null ? `${fmtDur(num(span.attrs?.prefillMs))} reading` : 'From time to first token'} />
+          <Stat label="Tokens read" value={readTokens !== null ? fmtNum(readTokens) : '–'} note={readTokens !== null ? 'Newly read this call' : 'Not recorded by this app build'} />
+          <Stat label="Reading speed" value={readTps !== null ? `${fmtNum(readTps)} tok/s` : '–'} note={readMs !== null ? `${fmtDur(readMs)} reading` : undefined} />
           <Stat label="Tokens out" value={fmtNum(num(span.attrs?.generatedTokens))} />
         </StatGrid>
       ) : span.kind === 'load' ? (

@@ -422,7 +422,7 @@ function TurnPanel({ trace, span, number, turn }: { trace: Trace; span: Span; nu
 
       <StatGrid>
         <Stat label="Latency" value={fmtDur(end - span.start)} />
-        <Stat label="First token" value={fmtDur(num(gens[0]?.attrs?.ttftMs))} />
+        <Stat label="First token" value={fmtDur(num(span.attrs?.firstTokenWallMs) ?? num(gens[0]?.attrs?.readMs) ?? num(gens[0]?.attrs?.ttftMs))} note="Sent to the first word" />
         <Stat label="Decode speed" value={decodeS > 0 ? `${fmtNum(tokens / decodeS, 1)} tok/s` : '–'} />
         <Stat label="Model calls" value={gens.length} />
         <Stat label="Tool calls" value={tools.length} note={tools.some((t) => t.status !== 'ok') ? `${tools.filter((t) => t.status !== 'ok').length} failed` : undefined} />

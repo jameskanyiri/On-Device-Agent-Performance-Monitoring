@@ -36,6 +36,8 @@ export type TraceRow = {
   error: string | null;
   firstTokenMs: number | null;
   decodeTps: number | null;
+  /** Prompt tokens read per second (prefill). */
+  readTps: number | null;
   promptTokens: number | null;
   contextUsed: number | null;
   memAddedMB: number | null;
@@ -60,6 +62,7 @@ export type RunRow = {
   status: string;
   tokens: number | null;
   tokensPerSec: number | null;
+  readTps: number | null;
   promptTokens: number | null;
   firstTokenMs: number | null;
   resultChars: number | null;
@@ -215,6 +218,7 @@ export function TraceExplorer({
     { id: 'latency', group: 'Model speed', label: 'Latency', hint: 'The whole reply', col: { width: 'w-28', align: 'end', cell: (t) => latency(t.durationMs, isLoad(t) ? null : slowReply) } },
     { id: 'ttft', group: 'Model speed', label: 'First token', hint: 'Reading the prompt + first word', col: { width: 'w-28', align: 'end', cell: (t) => dur(t.firstTokenMs) } },
     { id: 'speed', group: 'Model speed', label: 'Decode speed', hint: 'Tokens per second while writing', col: { width: 'w-32', align: 'end', cell: (t) => (t.decodeTps === null ? dash : `${fmtNum(t.decodeTps, 1)} tok/s`) } },
+    { id: 'readSpeed', group: 'Model speed', label: 'Reading speed', hint: 'Prompt tokens read per second (prefill)', col: { width: 'w-32', align: 'end', cell: (t) => (t.readTps === null ? dash : `${fmtNum(t.readTps)} tok/s`) } },
     { id: 'calls', group: 'Model speed', label: 'Model calls', col: { width: 'w-28', align: 'end', cell: (t) => (isLoad(t) ? dash : fmtNum(t.modelCalls)) } },
     { id: 'promptTokens', group: 'Tokens', label: 'Prompt tokens', col: { width: 'w-32', align: 'end', cell: (t) => n(t.promptTokens) } },
     { id: 'tokens', group: 'Tokens', label: 'Tokens out', col: { width: 'w-28', align: 'end', cell: (t) => (isLoad(t) ? dash : fmtNum(t.generatedTokens)) } },
@@ -313,6 +317,7 @@ export function TraceExplorer({
     { id: 'latency', group: 'Model speed', label: 'Latency', col: { width: 'w-28', align: 'end', cell: (r) => latency(r.durationMs, r.kind === 'tool' ? null : slowRun) } },
     { id: 'ttft', group: 'Model speed', label: 'First token', col: { width: 'w-28', align: 'end', cell: (r) => dur(r.firstTokenMs) } },
     { id: 'speed', group: 'Model speed', label: 'Decode speed', col: { width: 'w-32', align: 'end', cell: (r) => (r.tokensPerSec === null ? dash : `${fmtNum(r.tokensPerSec, 1)} tok/s`) } },
+    { id: 'readSpeed', group: 'Model speed', label: 'Reading speed', hint: 'Prompt tokens read per second (prefill)', col: { width: 'w-32', align: 'end', cell: (r) => (r.readTps === null ? dash : `${fmtNum(r.readTps)} tok/s`) } },
     { id: 'promptTokens', group: 'Tokens', label: 'Prompt tokens', col: { width: 'w-32', align: 'end', cell: (r) => n(r.promptTokens) } },
     { id: 'tokens', group: 'Tokens', label: 'Tokens out', col: { width: 'w-28', align: 'end', cell: (r) => n(r.tokens) } },
     { id: 'file', group: 'Tool', label: 'File', col: { width: 'w-40', cell: (r) => (r.path ? <span className="truncate font-mono text-xs text-muted-foreground">{r.path}</span> : dash) } },

@@ -28,6 +28,7 @@ const trace = (id: string, over: Partial<TraceRow> = {}): TraceRow => ({
   error: null,
   firstTokenMs: 400,
   decodeTps: 18,
+  readTps: 400,
   promptTokens: 100,
   contextUsed: 800,
   memAddedMB: 40,

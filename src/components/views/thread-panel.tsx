@@ -558,6 +558,9 @@ export function StepDetails({ trace, span, within = 'turn' }: { trace: Trace; sp
   const cpu = cpuOver(window);
   const attrs = Object.entries(span.attrs ?? {}).filter(([, v]) => v !== null && v !== '');
   const isGen = span.kind === 'generation';
+  const promptTokens = num(span.attrs?.promptTokens);
+  const readMs = num(span.attrs?.prefillMs) ?? num(span.attrs?.ttftMs);
+  const readTps = promptTokens && readMs ? promptTokens / (readMs / 1000) : null;
 
   return (
     <div className="flex flex-col gap-5">
@@ -577,6 +580,7 @@ export function StepDetails({ trace, span, within = 'turn' }: { trace: Trace; sp
           <Stat label="First token" value={fmtDur(num(span.attrs?.ttftMs))} note="Reading the prompt + first word" />
           <Stat label="Decode speed" value={num(span.attrs?.tokensPerSec) !== null ? `${fmtNum(num(span.attrs?.tokensPerSec), 1)} tok/s` : '–'} />
           <Stat label="Prompt tokens" value={fmtNum(num(span.attrs?.promptTokens))} note="Newly read this call" />
+          <Stat label="Reading speed" value={readTps !== null ? `${fmtNum(readTps)} tok/s` : '–'} note={num(span.attrs?.prefillMs) !== null ? `${fmtDur(num(span.attrs?.prefillMs))} reading` : 'From time to first token'} />
           <Stat label="Tokens out" value={fmtNum(num(span.attrs?.generatedTokens))} />
         </StatGrid>
       ) : span.kind === 'load' ? (

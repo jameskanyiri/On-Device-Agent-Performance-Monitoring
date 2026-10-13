@@ -141,8 +141,32 @@ export function sessionDetail(id: string) {
   const manifest = readManifest(id);
   const suite = SUITES[manifest.suite] ?? [];
   const runs = existsSync(join(dir, 'runs')) ? loadRuns(dir) : [];
+  // The paper-style hardware/software table: what every run in this eval ran on.
+  const distinct = (xs: (string | number | null | undefined)[]) => [...new Set(xs.filter((x) => x !== null && x !== undefined && x !== ''))].map(String);
+  const options = (manifest.options ?? {}) as Record<string, unknown>;
+  const environment = {
+    devices: distinct(runs.map((r) => [r.device.modelName, r.device.modelId && `(${r.device.modelId})`].filter(Boolean).join(' '))),
+    os: distinct(runs.map((r) => [r.device.osName, r.device.osVersion].filter(Boolean).join(' '))),
+    memoryGB: distinct(runs.map((r) => (r.device.physicalMemoryBytes ? (r.device.physicalMemoryBytes / 2 ** 30).toFixed(1) : null))),
+    cpuCores: distinct(runs.map((r) => r.device.cpuCount || null)),
+    runtime: distinct(runs.map((r) => r.device.runtime)),
+    modelFiles: distinct(runs.map((r) => r.modelFile && `${r.modelId}: ${r.modelFile}`)),
+    contextWindow: distinct(runs.map((r) => r.load?.maxSeqLen)),
+    app: distinct(runs.map((r) => [r.device.appVersion, r.device.appCommit && `@ ${r.device.appCommit}`].filter(Boolean).join(' '))),
+    decoding: distinct(runs.map((r) => r.generation && `temperature ${r.generation.temperature}, up to ${r.generation.maxNewTokens} tokens`)),
+    protocol: {
+      sampleMs: (options.sampleMs as number | undefined) ?? 500,
+      idleMs: (options.idleMs as number | undefined) ?? 3000,
+      settleMs: (options.settleMs as number | undefined) ?? 10_000,
+      cooldownMaxMs: (options.cooldownMaxMs as number | undefined) ?? 180_000,
+      stableMs: (options.stableMs as number | undefined) ?? 0,
+      backToBack: options.backToBack === true,
+      order: 'Shuffled each repeat',
+    },
+  };
   return {
     manifest,
+    environment,
     scenarios: SCENARIOS.filter((s) => manifest.scenarios.includes(s.id)),
     tasks: suite.map((t) => ({ id: t.id, title: t.title, needsTools: t.needsTools })),
     runs: runs.map((run) => {
@@ -376,6 +400,7 @@ export function runToTrace(run: RunResult): Trace {
           promptTokens: gen.promptTokens,
           generatedTokens: gen.generatedTokens,
           ttftMs: gen.ttftMs,
+          prefillMs: gen.prefillMs ?? null,
           tokensPerSec: gen.decodeMs > 0 ? Math.round((gen.generatedTokens / (gen.decodeMs / 1000)) * 10) / 10 : null,
         },
       })
@@ -443,6 +468,13 @@ export function traceSummary(trace: Trace) {
   };
 }
 
+/** Prompt tokens read per second in one model call (prefill time, else time to first token). */
+export function readSpeed(attrs: Record<string, unknown> | undefined): number | null {
+  const p = attrs?.promptTokens;
+  const ms = typeof attrs?.prefillMs === 'number' ? attrs.prefillMs : attrs?.ttftMs;
+  return typeof p === 'number' && p > 0 && typeof ms === 'number' && ms > 0 ? p / (ms / 1000) : null;
+}
+
 /** How fast the model was in a trace: first token, decode speed, prompt size, context. */
 function modelSpeed(trace: Trace) {
   const gens = trace.spans.filter((s) => s.kind === 'generation').sort((a, b) => a.start - b.start);
@@ -459,9 +491,21 @@ function modelSpeed(trace: Trace) {
       decodeS += n / tps;
     }
   }
+  // Reading speed: prompt tokens over prefill time (or time to first token where prefill isn't reported).
+  let read = 0;
+  let readS = 0;
+  for (const g of gens) {
+    const p = num(g.attrs?.promptTokens);
+    const ms = num(g.attrs?.prefillMs) ?? num(g.attrs?.ttftMs);
+    if (p && ms) {
+      read += p;
+      readS += ms / 1000;
+    }
+  }
   return {
     firstTokenMs: first ? num(first.attrs?.ttftMs) : null,
     decodeTps: decodeS > 0 ? tokens / decodeS : null,
+    readTps: readS > 0 ? read / readS : null,
     promptTokens: gens.reduce((a, g) => a + (num(g.attrs?.promptTokens) ?? 0), 0) || null,
     contextUsed: num(trace.attrs?.kvPos),
   };
@@ -539,6 +583,7 @@ function deviceRuns(deviceId: string, limit = 3000) {
         firstTokenMs: typeof sp.attrs?.ttftMs === 'number' ? sp.attrs.ttftMs : null,
         resultChars: typeof sp.attrs?.resultChars === 'number' ? sp.attrs.resultChars : null,
         tokensPerSec: typeof sp.attrs?.tokensPerSec === 'number' ? sp.attrs.tokensPerSec : null,
+        readTps: readSpeed(sp.attrs),
         path: typeof sp.attrs?.path === 'string' ? sp.attrs.path : null,
       });
     }

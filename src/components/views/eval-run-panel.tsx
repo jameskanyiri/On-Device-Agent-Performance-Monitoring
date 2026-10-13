@@ -12,7 +12,7 @@ import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTi
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/tabs';
 import { fmtDate, fmtDur, fmtMB, fmtNum, isNum } from '../format';
 import { Timeline } from '../timeline';
-import { Chip, KeyValues, PassChip, Stat, StatGrid, StatusChip, TextFrame, ThermalChip } from '../ui';
+import { Chip, KeyValues, PassChip, Readings, Stat, StatGrid, StatusChip, TextFrame, ThermalChip } from '../ui';
 import { usePoll } from '../use-poll';
 import { EVAL_METRICS, METRIC_GROUPS } from './eval-metrics';
 import { ExpandButton, HeaderButton, impact, Message, PaneDivider, StepDetails, TreeRow, usePanelSize } from './thread-panel';
@@ -256,12 +256,27 @@ function RunSummary({ data }: { data: RunDetail }) {
         <Stat label="Task time" value={metric('turnS')} />
         <Stat label="First token" value={metric('firstTokenWallS')} />
         <Stat label="Decode speed" value={metric('decodeTps')} />
+        <Stat label="Reading speed" value={metric('prefillTps')} />
         <Stat label="Model calls" value={fmtNum(v('modelCalls'))} />
         <Stat label="Tool calls" value={fmtNum(v('toolCalls'))} note={v('toolErrors') ? `${v('toolErrors')} failed` : undefined} />
         <Stat label="Tokens out" value={metric('generatedTokens')} />
         <Stat label="Peak memory" value={metric('memPeakMB')} note={v('memDeltaMB') !== null ? `+${fmtMB(v('memDeltaMB'))} over idle` : undefined} />
         <Stat label="Hottest" value={typeof m.thermalMax === 'string' ? <ThermalChip state={m.thermalMax} /> : '–'} />
       </StatGrid>
+
+      <TimeSplit m={m} />
+
+      <Readings
+        label="Where the phone started"
+        items={[
+          ['Started at', typeof m.startThermal === 'string' ? <ThermalChip key="t" state={m.startThermal} /> : '–'],
+          ['Battery', isNum(m.startBattery) ? `${Math.round(m.startBattery * 100)}%${m.startCharging ? ' · charging' : ''}` : '–'],
+          ['Low Power Mode', m.startLowPower === undefined ? '–' : m.startLowPower ? 'On' : 'Off'],
+          ['Brightness', isNum(m.startBrightness) ? `${Math.round(m.startBrightness * 100)}%` : '–'],
+          ['Temperature', isNum(m.temperature) ? (m.temperature === 0 ? '0 (greedy)' : String(m.temperature)) : '–'],
+          ['Time until warmer', isNum(m.firstEscalationS) ? fmtDur(m.firstEscalationS * 1000) : 'Stayed nominal'],
+        ]}
+      />
 
       <Tabs defaultValue="messages">
         <TabsList variant="line">
@@ -314,6 +329,42 @@ function RunSummary({ data }: { data: RunDetail }) {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+/** Where the run's time went: loading, reading the prompt, writing, tools, and the rest. */
+function TimeSplit({ m }: { m: RunDetail['metrics'] }) {
+  const parts = [
+    { key: 'loadS', label: 'Load', color: 'var(--span-load)' },
+    { key: 'prefillS', label: 'Reading', color: 'var(--span-turn)' },
+    { key: 'decodeS', label: 'Writing', color: 'var(--span-generation)' },
+    { key: 'toolS', label: 'Tools', color: 'var(--span-tool)' },
+    { key: 'otherS', label: 'Other', color: 'color-mix(in oklab, currentColor 25%, transparent)' },
+  ]
+    .map((p) => ({ ...p, s: isNum(m[p.key]) ? (m[p.key] as number) : 0 }))
+    .filter((p) => p.s > 0);
+  const total = parts.reduce((a, p) => a + p.s, 0);
+  if (!total) return null;
+  return (
+    <section aria-label="Where the time went" className="flex flex-col gap-2">
+      <div className="flex items-baseline justify-between">
+        <h3 className="text-sm font-semibold">Where the time went</h3>
+        <span className="text-xs text-subtle-foreground tabular-nums">{fmtDur(total * 1000)}</span>
+      </div>
+      <div className="flex h-3 w-full overflow-hidden rounded-full bg-foreground/5" role="img" aria-label={parts.map((p) => `${p.label} ${fmtDur(p.s * 1000)}`).join(', ')}>
+        {parts.map((p) => (
+          <span key={p.key} style={{ width: `${(p.s / total) * 100}%`, background: p.color }} className="h-full not-last:mr-px" />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-subtle-foreground tabular-nums">
+        {parts.map((p) => (
+          <span key={p.key} className="flex items-center gap-1.5">
+            <span aria-hidden="true" className="size-2 rounded-full" style={{ background: p.color }} />
+            {p.label} {fmtDur(p.s * 1000)} · {Math.round((p.s / total) * 100)}%
+          </span>
+        ))}
+      </div>
+    </section>
   );
 }
 

@@ -9,11 +9,12 @@ import type { Scenario } from '@/shared/protocol';
 import { Frame, FrameBody, FrameCell, FrameHeader, FrameRow } from '@/ui/frame';
 import { Input } from '@/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip';
-import { ago, clipText, fmtClock, fmtDate, fmtDur, isNum } from '../format';
-import { Chip, ErrorState, LoadingState, Page, PassChip, Readings, Section, StatusChip, Table, ThermalChip } from '../ui';
+import { ago, clipText, fmtClock, fmtDate, fmtDur, fmtNum, isNum } from '../format';
+import { Chip, ErrorState, KeyValues, LoadingState, Page, PassChip, Readings, Section, StatusChip, Table, ThermalChip } from '../ui';
 import { usePoll } from '../use-poll';
-import { EVAL_METRICS, mean, METRIC_GROUPS, type EvalMetric } from './eval-metrics';
+import { EVAL_METRICS, mean, METRIC_GROUPS, spread, type EvalMetric } from './eval-metrics';
 import { RunSheet } from './eval-run-panel';
+import { SustainedSection } from './eval-sustained';
 import { ColumnsMenu, FacetSidebar, IconButton, passesFacets, percentile, pick, useColumns, useFacets, WideTable, type ColumnDef, type FacetGroup } from './explorer-kit';
 
 /*
@@ -45,6 +46,18 @@ type Session = {
   now: number;
   running: boolean;
   inFlight: string | null;
+  environment: {
+    devices: string[];
+    os: string[];
+    memoryGB: string[];
+    cpuCores: string[];
+    runtime: string[];
+    modelFiles: string[];
+    contextWindow: string[];
+    app: string[];
+    decoding: string[];
+    protocol: { sampleMs: number; idleMs: number; settleMs: number; cooldownMaxMs: number; stableMs: number; backToBack: boolean; order: string };
+  };
 };
 
 type Outcome = 'pass' | 'fail' | 'error' | 'timeout';
@@ -107,7 +120,7 @@ export function SessionView({ id }: { id: string }) {
         const title = (s: string) => (manifest.models.length > 1 ? `${s} · ${model}` : s);
         return (
           <div key={model} className="flex flex-col gap-6">
-            <Section title={title('Compared')} meta={`Averages of completed runs · against ${label(baseline)}`}>
+            <Section title={title('Compared')} meta={`Mean of completed runs, ± standard deviation · coefficient of variation · against ${label(baseline)}`}>
               <Comparison runs={forModel} ids={ids} baseline={baseline} label={label} />
             </Section>
             <Section title={title('By task')} meta="One mark per repeat · click one to open it">
@@ -126,8 +139,18 @@ export function SessionView({ id }: { id: string }) {
         );
       })}
 
+      {runs.length ? (
+        <Section title="Over the session" meta="Each run in the order it ran · tinted by the hottest state it reached">
+          <SustainedSection runs={runs} ids={ids} label={label} />
+        </Section>
+      ) : null}
+
       <Section title="Runs">
         <RunExplorer runs={runs} models={manifest.models} label={label} taskTitle={taskTitle} now={now} onOpen={show} />
+      </Section>
+
+      <Section title="Environment" meta="What every run ran on, and how">
+        <Environment env={data.environment} />
       </Section>
 
       <RunSheet
@@ -140,6 +163,48 @@ export function SessionView({ id }: { id: string }) {
         onClose={() => router.push(pathname, { scroll: false })}
       />
     </Page>
+  );
+}
+
+// ── Environment (the paper's hardware and software tables) ─────────────────
+
+function Environment({ env }: { env: Session['environment'] }) {
+  const list = (xs: string[], unit = '') => (xs.length ? xs.map((x) => `${x}${unit}`).join(' · ') : <span className="text-subtle-foreground">Not recorded (rebuild the app)</span>);
+  const p = env.protocol;
+  const between = p.backToBack
+    ? 'Back to back: 1 s idle, no cool-down'
+    : `Cool down ${fmtDur(p.settleMs)}, then until nominal${p.stableMs ? ` for ${fmtDur(p.stableMs)}` : ''} (at most ${fmtDur(p.cooldownMaxMs)}); ${fmtDur(p.idleMs)} idle baseline`;
+  return (
+    <div className="grid items-start gap-4 xl:grid-cols-2">
+      <KeyValues
+        title="Hardware"
+        rows={[
+          ['Device', list(env.devices)],
+          ['OS', list(env.os)],
+          ['Memory', list(env.memoryGB, ' GB')],
+          ['CPU cores', list(env.cpuCores)],
+        ]}
+      />
+      <KeyValues
+        title="Software"
+        rows={[
+          ['Runtime', list(env.runtime)],
+          ['Model files', list(env.modelFiles)],
+          ['Context window', list(env.contextWindow, ' tokens')],
+          ['App', list(env.app)],
+        ]}
+      />
+      <KeyValues
+        title="Protocol"
+        rows={[
+          ['Decoding', list(env.decoding)],
+          ['Between runs', between],
+          ['Sampling', `Every ${fmtDur(p.sampleMs)}`],
+          ['Order', p.order],
+          ['Model', 'Loaded fresh for every run (cold); warm runs are not supported yet'],
+        ]}
+      />
+    </div>
   );
 }
 
@@ -160,6 +225,36 @@ function Delta({ base, value, metric }: { base?: number; value?: number; metric:
   );
 }
 
+/** A mean with its spread under it (± sd · CV), and the range and count on hover, as the paper reports runs. */
+function Spread({ xs, fmt }: { xs: number[]; fmt: (v: number) => string }) {
+  const s = spread(xs);
+  if (s.mean === undefined) return <span className="text-subtle-foreground">–</span>;
+  const body = (
+    <span className="flex flex-col items-end gap-0 leading-tight">
+      <span>{fmt(s.mean)}</span>
+      {s.sd !== undefined ? (
+        <span className="text-xs text-subtle-foreground">
+          ± {fmt(s.sd)}
+          {s.cv !== undefined ? ` · ${Math.round(s.cv)}%` : ''}
+        </span>
+      ) : null}
+    </span>
+  );
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span tabIndex={0} className="rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+          {body}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        {s.n} {s.n === 1 ? 'run' : 'runs'} · min {fmt(s.min!)} · max {fmt(s.max!)}
+        {s.cv !== undefined ? ` · CV ${fmtNum(s.cv, 1)}%` : ''}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function PointsDelta({ base, value }: { base?: number; value?: number }) {
   if (!isNum(base) || !isNum(value)) return <span className="text-subtle-foreground">–</span>;
   const d = Math.round(value - base);
@@ -170,7 +265,8 @@ function PointsDelta({ base, value }: { base?: number; value?: number }) {
 function Comparison({ runs, ids, baseline, label }: { runs: EvalRun[]; ids: string[]; baseline: string; label: (sid: string) => string }) {
   const others = ids.filter((s) => s !== baseline);
   const by = (sid: string) => runs.filter((r) => r.scenarioId === sid);
-  const avg = (sid: string, key: string) => mean(by(sid).filter((r) => r.ok).map((r) => r.metrics[key]).filter(isNum));
+  const values = (sid: string, key: string) => by(sid).filter((r) => r.ok).map((r) => r.metrics[key]).filter(isNum);
+  const avg = (sid: string, key: string) => mean(values(sid, key));
   const changeHeader = (sid: string) => (others.length > 1 ? `${label(sid)} change` : 'Change');
 
   type Row = { label: string; hint?: string; values: ReactNode[]; deltas: ReactNode[] };
@@ -194,13 +290,11 @@ function Comparison({ runs, ids, baseline, label }: { runs: EvalRun[]; ids: stri
     { title: 'Quality', rows: quality },
     ...METRIC_GROUPS.map((g) => ({
       title: g,
-      rows: EVAL_METRICS.filter((m) => m.group === g && ids.some((s) => isNum(avg(s, m.key)))).map((m) => ({
+      // Rows that are zero everywhere (e.g. time in a heat level never reached) say nothing.
+      rows: EVAL_METRICS.filter((m) => m.group === g && ids.some((s) => isNum(avg(s, m.key))) && !(m.group === 'Heat' && ids.every((s) => !avg(s, m.key)))).map((m) => ({
         label: m.label,
         hint: m.hint,
-        values: ids.map((s) => {
-          const v = avg(s, m.key);
-          return isNum(v) ? m.fmt(v) : '–';
-        }),
+        values: ids.map((s) => <Spread key={s} xs={values(s, m.key)} fmt={m.fmt} />),
         deltas: others.map((s) => <Delta key={s} base={avg(baseline, m.key)} value={avg(s, m.key)} metric={m} />),
       })),
     })),

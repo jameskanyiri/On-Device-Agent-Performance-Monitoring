@@ -67,6 +67,15 @@ function lanesFrom(samples: MetricSample[], platform: string): Lane[] {
   }
   if (cpu.length) lanes.push({ key: 'cpu', title: 'CPU', hint: '100% is one core', points: cpu, fmt: fmtPct, minMax: 100 });
   if (power.length) lanes.push({ key: 'power', title: 'Battery power', points: power, fmt: (v) => `${fmtNum(v, 2)} W` });
+  // Android extras: frequencies show throttling directly; headroom forecasts it; battery temperature is the heat itself.
+  const cpuFreq = pts((s) => s.cpuFreqAvgMHz);
+  const gpuFreq = pts((s) => s.gpuFreqMHz);
+  const thermalHeadroom = pts((s) => (isNum(s.thermalHeadroom) ? s.thermalHeadroom : undefined));
+  const batteryTemp = pts((s) => s.batteryTempC);
+  if (cpuFreq.length) lanes.push({ key: 'cpuFreq', title: 'CPU frequency', hint: 'Mean across cores; drops when throttled', points: cpuFreq, fmt: (v) => `${fmtNum(v)} MHz` });
+  if (gpuFreq.length) lanes.push({ key: 'gpuFreq', title: 'GPU frequency', hint: 'Drops when throttled', points: gpuFreq, fmt: (v) => `${fmtNum(v)} MHz` });
+  if (thermalHeadroom.length) lanes.push({ key: 'thermalHeadroom', title: 'Thermal headroom', hint: 'Android’s forecast: 1 means severe throttling', points: thermalHeadroom, fmt: (v) => fmtNum(v, 2), minMax: 1 });
+  if (batteryTemp.length) lanes.push({ key: 'batteryTemp', title: 'Battery temperature', points: batteryTemp, fmt: (v) => `${fmtNum(v, 1)} °C` });
   if (thermal.length) lanes.push({ key: 'thermal', title: 'Thermal state', hint: 'The phone throttles as it heats', thermal });
   return lanes;
 }

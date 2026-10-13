@@ -27,6 +27,10 @@ export type BenchConfig = {
   idleMs?: number;
   settleMs?: number;
   cooldownMaxMs?: number;
+  /** After cooling, wait until thermal has been nominal this long (a steady start, like the paper's ΔT check). */
+  stableMs?: number;
+  /** No cool-down between runs (the paper's sustained-load protocol): only a 1 s gap. */
+  backToBack?: boolean;
   turnTimeoutMs?: number;
   temperature?: number;
   maxNewTokens?: number;
@@ -142,8 +146,10 @@ export function startBench(config: BenchConfig) {
         rep,
         generation: { temperature: config.temperature ?? 0.2, maxNewTokens: config.maxNewTokens ?? 1024 },
         sampleIntervalMs: config.sampleMs ?? 500,
-        idleMs: config.idleMs ?? 3000,
-        cooldown: { settleMs: config.settleMs ?? 10_000, maxWaitMs: config.cooldownMaxMs ?? 180_000 },
+        idleMs: config.backToBack ? 1000 : (config.idleMs ?? 3000),
+        cooldown: config.backToBack
+          ? { settleMs: 0, maxWaitMs: 0, stableMs: 0 }
+          : { settleMs: config.settleMs ?? 10_000, maxWaitMs: config.cooldownMaxMs ?? 180_000, stableMs: config.stableMs ?? 0 },
         turnTimeoutMs: config.turnTimeoutMs ?? 240_000,
       });
     }

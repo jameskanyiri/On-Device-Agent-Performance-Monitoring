@@ -12,6 +12,7 @@ import { Frame, FrameBody, FrameHeader } from '@/ui/frame';
 import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
 import { Shimmer } from '@/ui/shimmer';
+import { ToggleGroup, ToggleGroupItem } from '@/ui/toggle-group';
 import { fmtClock, fmtDate, fmtDur } from '../format';
 import { Chip, ErrorState, LoadingState, Page, Section, Table, TextFrame } from '../ui';
 import { usePoll } from '../use-poll';
@@ -196,6 +197,8 @@ function NewBenchmark({ options }: { options: BenchState['options'] }) {
   const [reps, setReps] = useState('3');
   const [timeoutS, setTimeoutS] = useState('240');
   const [name, setName] = useState('');
+  const [between, setBetween] = useState<'cool' | 'steady' | 'back'>('cool');
+  const [temperature, setTemperature] = useState('0.2');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -222,6 +225,9 @@ function NewBenchmark({ options }: { options: BenchState['options'] }) {
         reps: Number(reps),
         name: name.trim() || undefined,
         turnTimeoutMs: Number(timeoutS) * 1000,
+        temperature: Number(temperature),
+        backToBack: between === 'back',
+        stableMs: between === 'steady' ? 60_000 : 0,
       }),
     });
     const json = await res.json().catch(() => ({}));
@@ -271,6 +277,25 @@ function NewBenchmark({ options }: { options: BenchState['options'] }) {
         <Field id="timeout" label="Turn timeout (s)">
           <Input id="timeout" type="number" min={30} value={timeoutS} onChange={(e) => setTimeoutS(e.target.value)} className="w-32" />
         </Field>
+        <Field id="temperature" label="Temperature (0 = greedy)">
+          <Input id="temperature" type="number" min={0} max={2} step={0.1} value={temperature} onChange={(e) => setTemperature(e.target.value)} className="w-32" />
+        </Field>
+        <div className="flex flex-col gap-1.5">
+          <span id="between-label" className="text-xs text-subtle-foreground">
+            Between runs
+          </span>
+          <ToggleGroup type="single" variant="outline" size="sm" value={between} onValueChange={(v) => v && setBetween(v as typeof between)} aria-labelledby="between-label">
+            <ToggleGroupItem value="cool" className="text-xs data-[state=on]:bg-foreground/[0.07]">
+              Cool down
+            </ToggleGroupItem>
+            <ToggleGroupItem value="steady" className="text-xs data-[state=on]:bg-foreground/[0.07]">
+              Steady 60 s
+            </ToggleGroupItem>
+            <ToggleGroupItem value="back" className="text-xs data-[state=on]:bg-foreground/[0.07]">
+              Back to back
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
         <Field id="name" label="Name">
           <Input id="name" placeholder="Optional" value={name} onChange={(e) => setName(e.target.value)} className="w-48" />
         </Field>

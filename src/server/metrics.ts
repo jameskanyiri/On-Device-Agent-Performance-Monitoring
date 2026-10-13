@@ -28,6 +28,14 @@ export type RunMetrics = {
   promptTokens: number;
   generatedTokens: number;
   decodeTps?: number;
+  /** Reading the prompt (prefill), all model calls. */
+  prefillS?: number;
+  /** Prompt tokens read per second of prefill. */
+  prefillTps?: number;
+  /** Writing (first token → last), all model calls. */
+  decodeS?: number;
+  /** Turn time not spent reading, writing or in tools (harness, parsing, scheduling). */
+  otherS?: number;
   kvPeak?: number;
   toolCalls: number;
   toolErrors: number;
@@ -42,8 +50,33 @@ export type RunMetrics = {
   thermalStart?: string;
   thermalMax?: string;
   thermalElevatedS?: number;
+  /** Seconds in each thermal level (Android's light counts as fair, severe as serious). */
+  thermalNominalS?: number;
+  thermalFairS?: number;
+  thermalModerateS?: number;
+  thermalSeriousS?: number;
+  thermalCriticalS?: number;
+  /** Seconds from the model starting to load until the phone first left nominal (unset if it never did). */
+  firstEscalationS?: number;
   powerIdleW?: number;
   powerActiveW?: number;
+  powerPeakW?: number;
+  /** Average power per token/s of decode speed: lower means more efficient (Android). */
+  wattsPerTps?: number;
+  batteryTempMaxC?: number;
+  /** Android's thermal forecast at its highest (1 = severe throttling). */
+  thermalHeadroomMax?: number;
+  cpuFreqAvgMHz?: number;
+  gpuFreqAvgMHz?: number;
+  // Where the phone started (just before the model loaded)
+  startThermal?: string;
+  startBattery?: number;
+  startCharging?: boolean;
+  startLowPower?: boolean;
+  startBrightness?: number;
+  // Generation settings
+  temperature?: number;
+  maxNewTokens?: number;
   energyJ?: number;
   energyAboveIdleJ?: number;
   joulesPerToken?: number;
@@ -61,10 +94,18 @@ const median = (xs: number[]) => {
   return s.length % 2 ? s[mid] : (s[mid - 1]! + s[mid]!) / 2;
 };
 const mb = (bytes?: number) => (bytes === undefined ? undefined : bytes / 1e6);
+const mean = (xs: number[]) => (xs.length ? sum(xs) / xs.length : undefined);
+const nums = (xs: (number | null | undefined)[]) => xs.filter((x): x is number => typeof x === 'number' && Number.isFinite(x));
+
+/** Thermal levels shared by both platforms, for time-in-state. */
+const LEVEL_KEYS = ['thermalNominalS', 'thermalFairS', 'thermalModerateS', 'thermalSeriousS', 'thermalCriticalS'] as const;
 
 export function summarizeRun(run: RunResult): RunMetrics {
   const gens = run.turns.flatMap((t) => t.generations);
   const decodeS = sum(gens.map((g) => g.decodeMs)) / 1000;
+  // Prefill: the runtime's own figure when it reports one, else time to first token.
+  const prefillMs = gens.map((g) => g.prefillMs ?? g.ttftMs);
+  const prefillS = gens.length ? sum(prefillMs) / 1000 : undefined;
   const generatedTokens = sum(gens.map((g) => g.generatedTokens));
   const { idleStart, loadStart, turnsEnd } = run.phases;
   const activeEnd = turnsEnd ?? run.endedAt;
@@ -96,19 +137,25 @@ export function summarizeRun(run: RunResult): RunMetrics {
     }
   }
 
-  // Thermal: hottest state reached and time spent above nominal.
+  // Thermal: hottest state reached, time in each level, and when it first left nominal.
   let thermalMax: string | undefined;
   let thermalElevatedS = 0;
+  let firstEscalationS: number | undefined;
+  const levelS = [0, 0, 0, 0, 0];
   const all = samples.filter((s) => s.t >= idleStart);
   for (let i = 0; i < all.length; i++) {
     const s = all[i]!;
     if (!s.thermal) continue;
-    if (thermalMax === undefined || (THERMAL_RANK[s.thermal] ?? 0) > (THERMAL_RANK[thermalMax] ?? 0)) {
-      thermalMax = s.thermal;
-    }
+    const rank = THERMAL_RANK[s.thermal] ?? 0;
+    if (thermalMax === undefined || rank > (THERMAL_RANK[thermalMax] ?? 0)) thermalMax = s.thermal;
+    if (rank > 0 && firstEscalationS === undefined && loadStart !== undefined && s.t >= loadStart) firstEscalationS = (s.t - loadStart) / 1000;
     const next = all[i + 1];
-    if (next && (THERMAL_RANK[s.thermal] ?? 0) > 0) thermalElevatedS += (next.t - s.t) / 1000;
+    if (!next) continue;
+    const dt = (next.t - s.t) / 1000;
+    if (rank > 0) thermalElevatedS += dt;
+    levelS[Math.min(4, rank)]! += dt;
   }
+  const hasThermal = all.some((s) => s.thermal);
 
   // Energy (Android): integrate power over the active window, and compare with idle.
   const powerIdleW = median(idle.map((s) => s.powerW).filter((x): x is number => x !== undefined));
@@ -128,6 +175,14 @@ export function summarizeRun(run: RunResult): RunMetrics {
       ? energyJ - powerIdleW * activeS
       : undefined;
 
+  const powerPeak = nums(active.map((s) => s.powerW));
+  const powerActiveW = energyJ !== undefined && activeS ? energyJ / activeS : undefined;
+  const decodeTps = decodeS > 0 ? generatedTokens / decodeS : undefined;
+  const promptTokens = sum(gens.map((g) => g.promptTokens));
+  const turnS = run.turns.length ? sum(run.turns.map((t) => t.endedAt - t.startedAt)) / 1000 : undefined;
+  const toolS = sum(run.tools.map((t) => t.durationMs ?? 0)) / 1000;
+  const start = run.start;
+
   const firstTurn = run.turns[0];
   const firstGen = firstTurn?.generations[0];
   const batteries = samples.map((s) => s.batteryLevel).filter((x): x is number => x !== undefined);
@@ -137,17 +192,21 @@ export function summarizeRun(run: RunResult): RunMetrics {
     loadS: run.load && run.load.sessionCreateMs / 1000,
     initTokens: run.load?.initTokens,
     maxSeqLen: run.load?.maxSeqLen,
-    turnS: run.turns.length ? sum(run.turns.map((t) => t.endedAt - t.startedAt)) / 1000 : undefined,
+    turnS,
     ttftS: firstGen && firstGen.ttftMs / 1000,
     firstTokenWallS: firstTurn?.firstTokenWallMs !== undefined ? firstTurn.firstTokenWallMs / 1000 : undefined,
     modelCalls: gens.length,
-    promptTokens: sum(gens.map((g) => g.promptTokens)),
+    promptTokens,
     generatedTokens,
-    decodeTps: decodeS > 0 ? generatedTokens / decodeS : undefined,
+    decodeTps,
+    prefillS,
+    prefillTps: prefillS ? promptTokens / prefillS : undefined,
+    decodeS: gens.length ? decodeS : undefined,
+    otherS: turnS !== undefined && prefillS !== undefined ? Math.max(0, turnS - prefillS - decodeS - toolS) : undefined,
     kvPeak: Math.max(0, ...run.turns.map((t) => t.kvPosAfter ?? 0)) || undefined,
     toolCalls: run.tools.length,
     toolErrors: run.tools.filter((t) => !t.ok).length,
-    toolS: sum(run.tools.map((t) => t.durationMs ?? 0)) / 1000,
+    toolS,
     memIdleMB: mb(memIdle),
     memPeakMB: mb(memPeak),
     memDeltaMB: memIdle !== undefined && memPeak !== undefined ? mb(memPeak - memIdle) : undefined,
@@ -157,8 +216,23 @@ export function summarizeRun(run: RunResult): RunMetrics {
     thermalStart: all.find((s) => s.thermal)?.thermal,
     thermalMax,
     thermalElevatedS,
+    ...(hasThermal ? Object.fromEntries(LEVEL_KEYS.map((k, i) => [k, levelS[i]])) : {}),
+    firstEscalationS,
     powerIdleW,
-    powerActiveW: energyJ !== undefined && activeS ? energyJ / activeS : undefined,
+    powerActiveW,
+    powerPeakW: powerPeak.length ? Math.max(...powerPeak) : undefined,
+    wattsPerTps: powerActiveW !== undefined && decodeTps ? powerActiveW / decodeTps : undefined,
+    batteryTempMaxC: nums(active.map((s) => s.batteryTempC)).reduce<number | undefined>((a, b) => (a === undefined || b > a ? b : a), undefined),
+    thermalHeadroomMax: nums(active.map((s) => s.thermalHeadroom)).reduce<number | undefined>((a, b) => (a === undefined || b > a ? b : a), undefined),
+    cpuFreqAvgMHz: mean(nums(active.map((s) => s.cpuFreqAvgMHz))),
+    gpuFreqAvgMHz: mean(nums(active.map((s) => s.gpuFreqMHz))),
+    startThermal: start?.thermal,
+    startBattery: start?.batteryLevel,
+    startCharging: start ? start.batteryState === 'charging' || start.batteryState === 'full' : undefined,
+    startLowPower: start?.lowPowerMode,
+    startBrightness: start?.screenBrightness,
+    temperature: run.generation?.temperature,
+    maxNewTokens: run.generation?.maxNewTokens,
     energyJ,
     energyAboveIdleJ,
     joulesPerToken: energyJ !== undefined && generatedTokens > 0 ? energyJ / generatedTokens : undefined,

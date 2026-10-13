@@ -482,16 +482,27 @@ function TurnDetails({ trace, number }: { trace: Trace; number: number | null })
         </span>
       </div>
 
-      <StatGrid>
-        <Stat label="Latency" value={fmtDur(duration(trace))} />
-        <Stat label="First token" value={fmtDur(firstWait(trace))} note="Sent to the first word" />
-        <Stat label="Decode speed" value={decodeS > 0 ? `${fmtNum(tokens / decodeS, 1)} tok/s` : '–'} />
-        <Stat label="Model calls" value={gens.length} />
-        <Stat label="Tool calls" value={tools.length} />
-        <Stat label="Tokens out" value={fmtNum(tokens)} />
-        <Stat label="Peak memory" value={fmtMB(dev.peakMB)} note={dev.addedMB !== null ? `+${fmtMB(dev.addedMB)} during the turn` : undefined} />
-        <Stat label="Hottest" value={dev.thermalMax ? <ThermalChip state={dev.thermalMax} /> : '–'} />
-      </StatGrid>
+      {number === null ? (
+        // A model load: what the harness put in the context before the user typed anything.
+        <StatGrid>
+          <Stat label="Load time" value={fmtDur(duration(trace))} />
+          <Stat label="File tools" value={trace.attrs?.fileTools === true ? 'On' : trace.attrs?.fileTools === false ? 'Off' : '–'} />
+          <Stat label="Prompt tokens at start" value={fmtNum(num(trace.attrs?.initTokens))} note="System prompt + tool definitions" />
+          <Stat label="Peak memory" value={fmtMB(dev.peakMB)} note={dev.addedMB !== null ? `+${fmtMB(dev.addedMB)} while loading` : undefined} />
+          <Stat label="Hottest" value={dev.thermalMax ? <ThermalChip state={dev.thermalMax} /> : '–'} />
+        </StatGrid>
+      ) : (
+        <StatGrid>
+          <Stat label="Latency" value={fmtDur(duration(trace))} />
+          <Stat label="First token" value={fmtDur(firstWait(trace))} note="Sent to the first word" />
+          <Stat label="Decode speed" value={decodeS > 0 ? `${fmtNum(tokens / decodeS, 1)} tok/s` : '–'} />
+          <Stat label="Model calls" value={gens.length} />
+          <Stat label="Tool calls" value={tools.length} />
+          <Stat label="Tokens out" value={fmtNum(tokens)} />
+          <Stat label="Peak memory" value={fmtMB(dev.peakMB)} note={dev.addedMB !== null ? `+${fmtMB(dev.addedMB)} during the turn` : undefined} />
+          <Stat label="Hottest" value={dev.thermalMax ? <ThermalChip state={dev.thermalMax} /> : '–'} />
+        </StatGrid>
+      )}
 
       <Tabs defaultValue={number === null ? 'timeline' : 'messages'}>
         <TabsList variant="line">

@@ -467,6 +467,9 @@ export function traceSummary(trace: Trace) {
     generatedTokens: gens.reduce((a, s) => a + num(s.attrs?.generatedTokens), 0),
     toolCalls: trace.spans.filter((s) => s.kind === 'tool').length,
     tools: [...new Set(trace.spans.filter((s) => s.kind === 'tool').map((s) => s.name))],
+    // The harness this ran with: tools on or off, and what was in the context before the user spoke.
+    fileTools: typeof trace.attrs?.fileTools === 'boolean' ? trace.attrs.fileTools : null,
+    initTokens: typeof trace.attrs?.initTokens === 'number' ? trace.attrs.initTokens : null,
     peakMemMB: mem.length ? Math.max(...mem) / 1e6 : null,
     cpuPct,
     // Older traces (before threads and text were traced) have none of these.

@@ -28,6 +28,10 @@ export type TraceRow = {
   generatedTokens: number;
   toolCalls: number;
   tools: string[];
+  /** Whether file tools were on (null in older traces). */
+  fileTools: boolean | null;
+  /** Model loads: tokens in the context before the user's first message (system prompt + tool definitions). */
+  initTokens: number | null;
   peakMemMB: number | null;
   cpuPct: number | null;
   threadId: string | null;
@@ -122,6 +126,7 @@ export function TraceExplorer({
     type: [t.kind === 'load' ? 'load' : 'turn'],
     model: [t.model ?? 'Unknown'],
     tool: t.kind === 'load' ? [] : t.tools.length ? t.tools : [NO_TOOLS],
+    harness: t.fileTools === null ? [] : [t.fileTools ? 'on' : 'off'],
   });
   const tracesInScope = traces.filter(
     (t) =>
@@ -151,7 +156,8 @@ export function TraceExplorer({
     { id: 'status', title: 'Status', label: (v) => STATUS_LABEL[v] ?? v },
     { id: 'type', title: 'Type', label: (v) => TYPE_LABEL[v] ?? v },
     { id: 'model', title: 'Model', label: (v) => v },
-    { id: 'tool', title: 'Tools', label: (v) => v },
+    { id: 'harness', title: 'File tools', label: (v) => (v === 'on' ? 'On' : 'Off') },
+    { id: 'tool', title: 'Tools used', label: (v) => v },
   ];
 
   // ── Threads ──
@@ -223,6 +229,8 @@ export function TraceExplorer({
     { id: 'promptTokens', group: 'Tokens', label: 'Prompt tokens', col: { width: 'w-32', align: 'end', cell: (t) => n(t.promptTokens) } },
     { id: 'tokens', group: 'Tokens', label: 'Tokens out', col: { width: 'w-28', align: 'end', cell: (t) => (isLoad(t) ? dash : fmtNum(t.generatedTokens)) } },
     { id: 'context', group: 'Tokens', label: 'Context used', hint: 'Tokens in the model’s memory after the reply', col: { width: 'w-28', align: 'end', cell: (t) => n(t.contextUsed) } },
+    { id: 'harness', group: 'Agent', label: 'Tools', hint: 'File tools on or off for this chat', col: { width: 'w-20', cell: (t) => (t.fileTools === null ? dash : <Chip>{t.fileTools ? 'On' : 'Off'}</Chip>) } },
+    { id: 'initTokens', group: 'Tokens', label: 'Prompt at start', hint: 'Model loads: system prompt + tool definitions, before you type', col: { width: 'w-32', align: 'end', cell: (t) => n(t.initTokens) } },
     { id: 'toolCalls', group: 'Agent', label: 'Tool calls', col: { width: 'w-24', align: 'end', cell: (t) => (isLoad(t) ? dash : fmtNum(t.toolCalls)) } },
     {
       id: 'tools',
@@ -428,7 +436,7 @@ export function TraceExplorer({
 }
 
 const DEFAULT_COLUMNS: Record<View, string[]> = {
-  traces: ['status', 'input', 'output', 'start', 'latency', 'ttft', 'speed', 'tokens', 'tools', 'peakMem', 'headroom', 'cpu', 'thermal'],
+  traces: ['status', 'input', 'output', 'start', 'harness', 'latency', 'ttft', 'speed', 'tokens', 'initTokens', 'tools', 'peakMem', 'headroom', 'cpu', 'thermal'],
   threads: ['thread', 'replies', 'last', 'errors', 'p50', 'p95', 'tokens', 'peakMem', 'thermal'],
   runs: ['status', 'name', 'type', 'trace', 'start', 'latency', 'ttft', 'speed', 'tokens', 'file'],
 };

@@ -547,6 +547,12 @@ function RunExplorer({
     { id: 'prompt', group: 'What happened', label: 'Prompt', col: { width: 'w-64', cell: (r) => <span className="truncate text-muted-foreground">{r.prompt ?? '–'}</span> } },
     { id: 'reply', group: 'What happened', label: 'Reply', hint: 'The last turn’s', col: { width: 'w-64', cell: (r) => <span className="truncate text-muted-foreground">{r.reply || '–'}</span> } },
     ...EVAL_METRICS.map(metricColumn),
+    // Where the phone started, to spot runs that began warm, low or charging.
+    { id: 'startThermal', group: 'Where the phone started', label: 'Started at', hint: 'Thermal state before the model loaded', col: { width: 'w-28', cell: (r) => (typeof r.metrics.startThermal === 'string' ? <ThermalChip state={r.metrics.startThermal} /> : dash) } },
+    { id: 'startBattery', group: 'Where the phone started', label: 'Battery at start', col: { width: 'w-32', align: 'end', cell: (r) => (isNum(r.metrics.startBattery) ? `${Math.round(r.metrics.startBattery * 100)}%${r.metrics.startCharging ? ' · charging' : ''}` : dash) } },
+    { id: 'startLowPower', group: 'Where the phone started', label: 'Low Power Mode', col: { width: 'w-32', cell: (r) => (r.metrics.startLowPower === undefined ? dash : r.metrics.startLowPower ? 'On' : 'Off') } },
+    { id: 'startBrightness', group: 'Where the phone started', label: 'Brightness', col: { width: 'w-28', align: 'end', cell: (r) => (isNum(r.metrics.startBrightness) ? `${Math.round(r.metrics.startBrightness * 100)}%` : dash) } },
+    { id: 'temperature', group: 'Where the phone started', label: 'Temperature', hint: 'Decoding (0 = greedy)', col: { width: 'w-28', align: 'end', cell: (r) => (isNum(r.metrics.temperature) ? String(r.metrics.temperature) : dash) } },
     {
       id: 'thermalMax',
       group: 'Device impact',
@@ -555,7 +561,7 @@ function RunExplorer({
     },
   ];
   // Model speed etc. columns, ordered by group as the menu shows them.
-  const order = ['What happened', ...METRIC_GROUPS];
+  const order = ['What happened', ...METRIC_GROUPS, 'Where the phone started'];
   const sorted = [...defs].sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group));
 
   return (

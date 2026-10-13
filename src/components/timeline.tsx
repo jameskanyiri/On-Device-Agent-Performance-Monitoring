@@ -72,10 +72,15 @@ function lanesFrom(samples: MetricSample[], platform: string): Lane[] {
   const gpuFreq = pts((s) => s.gpuFreqMHz);
   const thermalHeadroom = pts((s) => (isNum(s.thermalHeadroom) ? s.thermalHeadroom : undefined));
   const batteryTemp = pts((s) => s.batteryTempC);
+  const cpuFreqMax = pts((s) => s.cpuFreqMaxMHz);
+  const brightness = pts((s) => (isNum(s.screenBrightness) ? s.screenBrightness * 100 : undefined));
   if (cpuFreq.length) lanes.push({ key: 'cpuFreq', title: 'CPU frequency', hint: 'Mean across cores; drops when throttled', points: cpuFreq, fmt: (v) => `${fmtNum(v)} MHz` });
+  if (cpuFreqMax.length) lanes.push({ key: 'cpuFreqMax', title: 'Fastest core', hint: 'Highest core frequency', points: cpuFreqMax, fmt: (v) => `${fmtNum(v)} MHz` });
   if (gpuFreq.length) lanes.push({ key: 'gpuFreq', title: 'GPU frequency', hint: 'Drops when throttled', points: gpuFreq, fmt: (v) => `${fmtNum(v)} MHz` });
   if (thermalHeadroom.length) lanes.push({ key: 'thermalHeadroom', title: 'Thermal headroom', hint: 'Android’s forecast: 1 means severe throttling', points: thermalHeadroom, fmt: (v) => fmtNum(v, 2), minMax: 1 });
   if (batteryTemp.length) lanes.push({ key: 'batteryTemp', title: 'Battery temperature', points: batteryTemp, fmt: (v) => `${fmtNum(v, 1)} °C` });
+  // The screen draws power too: brightness changes show up in power and heat.
+  if (brightness.length) lanes.push({ key: 'brightness', title: 'Screen brightness', points: brightness, fmt: fmtPct, minMax: 100 });
   if (thermal.length) lanes.push({ key: 'thermal', title: 'Thermal state', hint: 'The phone throttles as it heats', thermal });
   return lanes;
 }

@@ -83,6 +83,8 @@ export type RunMetrics = {
   joulesPerToken?: number;
   batteryStart?: number;
   batteryEnd?: number;
+  /** Battery used during the run, in % (unset while charging; iOS reports in 1% steps). */
+  batteryUsedPct?: number;
   /** Any sample while charging: power numbers are meaningless then. */
   charging: boolean;
 };
@@ -241,6 +243,8 @@ export function summarizeRun(run: RunResult): RunMetrics {
     joulesPerToken: energyJ !== undefined && generatedTokens > 0 ? energyJ / generatedTokens : undefined,
     batteryStart: batteries[0],
     batteryEnd: batteries.at(-1),
+    batteryUsedPct:
+      batteries.length >= 2 && !samples.some((s) => s.batteryState === 'charging' || s.batteryState === 'full') ? (batteries[0]! - batteries.at(-1)!) * 100 : undefined,
     charging: samples.some((s) => s.batteryState === 'charging' || s.batteryState === 'full'),
   };
 }

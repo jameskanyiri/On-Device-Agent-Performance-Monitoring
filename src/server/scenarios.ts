@@ -32,6 +32,9 @@ export const SCENARIOS: Scenario[] = [
   { id: 'file-tools', label: 'File tools', harness: { fileTools: true } },
   // Step 2: the same tools plus the todo planning tool (the app's src/harness/planning.ts).
   { id: 'planning', label: 'File tools + planning', harness: { fileTools: true, planning: true } },
+  // Step 3a: the same workspace through one bash tool (the app's src/harness/bash.ts): ~950 fewer tokens at start.
+  { id: 'bash', label: 'Bash tool', harness: { fileTools: true, bash: true } },
+  { id: 'bash-planning', label: 'Bash tool + planning', harness: { fileTools: true, bash: true, planning: true } },
 ];
 
 export const BASELINE_ID = 'baseline';

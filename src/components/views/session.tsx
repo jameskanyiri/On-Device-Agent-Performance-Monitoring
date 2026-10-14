@@ -110,7 +110,8 @@ export function SessionView({ id }: { id: string }) {
       </span>,
     ];
   });
-  for (const sid of others) readings.push([others.length > 1 ? `${label(sid)} change` : 'Change', <PointsDelta key={sid} base={rate(baseline)} value={rate(sid)} />]);
+  // With several setups the changes are in the Compared table; here they'd crowd out the title.
+  if (others.length === 1) readings.push(['Change', <PointsDelta key={others[0]} base={rate(baseline)} value={rate(others[0]!)} />]);
 
   return (
     <Page
@@ -334,22 +335,23 @@ function Comparison({ runs, ids, baseline, label, outcomes }: { runs: EvalRun[];
     })),
   ].filter((g) => g.rows.length);
 
+  // Two tables side by side only while they fit: with 3+ setups each needs the full width.
   return (
-    <div className="grid items-start gap-4 xl:grid-cols-2">
+    <div className={cn('grid items-start gap-4', ids.length <= 2 && 'xl:grid-cols-2')}>
       {groups.map((g) => (
         <Frame key={g.title} role="table" aria-label={g.title}>
           <FrameHeader className="px-0">
             <FrameRow>
-              <FrameCell header className="text-foreground">
+              <FrameCell header className="min-w-44 text-foreground">
                 {g.title}
               </FrameCell>
               {ids.map((s) => (
-                <FrameCell key={s} header className="w-28 flex-none justify-end">
+                <FrameCell key={s} header className="w-28 flex-none justify-end text-right leading-tight whitespace-normal">
                   {label(s)}
                 </FrameCell>
               ))}
               {others.map((s) => (
-                <FrameCell key={s} header className="w-36 flex-none justify-end">
+                <FrameCell key={s} header className="w-36 flex-none justify-end text-right leading-tight whitespace-normal">
                   {changeHeader(s)}
                 </FrameCell>
               ))}
@@ -358,7 +360,7 @@ function Comparison({ runs, ids, baseline, label, outcomes }: { runs: EvalRun[];
           <FrameBody>
             {g.rows.map((r) => (
               <FrameRow key={r.label}>
-                <FrameCell className="flex-col items-start justify-center gap-0 py-1.5">
+                <FrameCell className="min-w-44 flex-col items-start justify-center gap-0 py-1.5">
                   <span className="max-w-full truncate">{r.label}</span>
                   {r.hint ? <span className="max-w-full truncate text-xs text-subtle-foreground">{r.hint}</span> : null}
                 </FrameCell>

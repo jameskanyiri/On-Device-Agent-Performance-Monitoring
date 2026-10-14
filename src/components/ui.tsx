@@ -57,7 +57,8 @@ export function Page({ title, description, back, actions, aside, children }: { t
   return (
     <div className="flex flex-col gap-6 px-8 pt-6 pb-10 duration-200 animate-in fade-in motion-reduce:animate-none">
       <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
-      <header className="flex min-w-0 flex-1 flex-col gap-1">
+      {/* At least 20rem, so wide readings wrap below the title instead of squeezing it. */}
+      <header className="flex min-w-80 flex-1 flex-col gap-1">
         {back ? (
           <Link
             href={back.href}
@@ -73,7 +74,7 @@ export function Page({ title, description, back, actions, aside, children }: { t
         {description ? <div className="text-sm text-muted-foreground">{description}</div> : null}
       </header>
       {/* Beside the title: readings that describe the whole page (e.g. a device's current numbers). */}
-      {aside ? <div className="shrink-0">{aside}</div> : null}
+      {aside ? <div className="max-w-full">{aside}</div> : null}
       </div>
       {children}
     </div>

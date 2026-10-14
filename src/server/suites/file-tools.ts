@@ -1,4 +1,4 @@
-import { all, fileMatches, replyMatches, type Task } from '../checks';
+import { all, fileMatches, lastReply, replyMatches, type Task } from '../checks';
 
 /*
  * Tasks for the filesystem tools. Each starts from its own workspace, so the
@@ -54,7 +54,12 @@ export const FILE_TOOLS_SUITE: Task[] = [
     needsTools: true,
     files: NOTES,
     turns: ['Which of my files mention the dentist?'],
-    check: (run) => all(replyMatches(run, /health\.md/i), replyMatches(run, /todo\.md/i)),
+    // Naming every file isn't finding the right ones (seen 14 Oct: a find that listed the whole workspace).
+    check: (run) => {
+      const wrong = Object.keys(NOTES).filter((p) => !/dentist/i.test(NOTES[p as keyof typeof NOTES]) && lastReply(run).includes(p.split('/').pop()!));
+      if (wrong.length) return { pass: false, detail: `also named files without the dentist: ${wrong.join(', ')}` };
+      return all(replyMatches(run, /health\.md/i), replyMatches(run, /todo\.md/i));
+    },
   },
   {
     id: 'count-markdown',

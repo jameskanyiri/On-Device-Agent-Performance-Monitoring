@@ -16,6 +16,30 @@ const run = (turns: TurnRecord[], ok = true, tools: ToolRecord[] = []) => ({ ok,
 const pass = { pass: true, detail: '' };
 const fail = { pass: false, detail: '' };
 
+describe('runOutcome: context full', () => {
+  // dentist-plan with planning, 14 Oct: 7 calls from 1,351 tokens, then prefill failed.
+  const tools: ToolRecord[] = [
+    { turn: 0, name: 'todo', ok: true, args: { steps: [{ step: 'Find the dentist appointment in my notes.', done: false }, { step: 'Add a todo item to /todo.md with the date and time.', done: false }, { step: 'Save a reminder to /drafts/dentist-reminder.txt.', done: false }] }, resultChars: 255 },
+    { turn: 0, name: 'read_file', ok: false, args: { file_path: '/notes' }, resultChars: 46 },
+    { turn: 0, name: 'ls', ok: true, args: { path: '/notes' }, resultChars: 54 },
+    { turn: 0, name: 'read_file', ok: true, args: { file_path: '/notes/health.md' }, resultChars: 100 },
+    { turn: 0, name: 'todo', ok: true, args: { steps: [{ step: 'Find the dentist appointment in my notes.', done: true }, { step: 'Add a todo item to /todo.md with the date and time.', done: false }, { step: 'Save a reminder to /drafts/dentist-reminder.txt.', done: false }] }, resultChars: 279 },
+    { turn: 0, name: 'write_file', ok: true, args: { content: 'Appointment on the 14th at 9am.', file_path: '/drafts/dentist-reminder.txt' }, resultChars: 41 },
+    { turn: 0, name: 'write_file', ok: false, args: { content: 'Date: 14th, Time: 9am', file_path: '/todo.md' }, resultChars: 84 },
+  ];
+  const crashed = (error: string, initTokens: number) =>
+    ({ ok: false, error, load: { sessionCreateMs: 1, initTokens, maxSeqLen: 2048 }, tools, turns: [{ ...turn('', 'error'), kvPosBefore: initTokens }] }) as unknown as RunResult;
+
+  it('a failed prefill near the window is context full', () => {
+    expect(runOutcome(crashed('LLMRunner.prefill: Failed: Error::Internal', 1351), fail)).toBe('context-full');
+  });
+
+  it('the same failure far from the window, or another error, is a crash', () => {
+    expect(runOutcome(crashed('LLMRunner.prefill: Failed: Error::Internal', 200), fail)).toBe('crashed');
+    expect(runOutcome(crashed('Turn 1 timed out after 240 s', 1351), fail)).toBe('crashed');
+  });
+});
+
 describe('runOutcome', () => {
   it('finished when the check passes', () => {
     expect(runOutcome(run([turn('Done: /shopping.md now lists milk, eggs and bread.')]), pass)).toBe('finished');
@@ -89,6 +113,12 @@ describe('toolRepeats', () => {
   it('a call made twice with work in between is a repeat but not a loop', () => {
     const r = call('read_file', { path: '/todo.md' });
     expect(toolRepeats([r, call('edit_file', { path: '/todo.md', old: 'a', new: 'b' }), r])).toEqual({ repeats: 1, looped: false });
+  });
+
+  it('nested arguments count: ticking a todo step is not a repeat (bug seen 14 Oct)', () => {
+    const todo = (done: boolean) => call('todo', { steps: [{ step: 'find the budget', done }] });
+    expect(toolRepeats([todo(false), todo(true)])).toEqual({ repeats: 0, looped: false });
+    expect(toolRepeats([todo(false), todo(false)])).toEqual({ repeats: 1, looped: true });
   });
 
   it('argument order does not matter', () => {

@@ -35,6 +35,9 @@ export const SCENARIOS: Scenario[] = [
   // Step 3a: the same workspace through one bash tool (the app's src/harness/bash.ts) instead of the seven file tools.
   { id: 'bash', label: 'Bash tool', harness: { fileTools: false, bash: true } },
   { id: 'bash-planning', label: 'Bash tool + planning', harness: { fileTools: false, bash: true, planning: true } },
+  // Step 3b: the same setups taught with one worked example per job (the app's src/harness/prompt.ts).
+  { id: 'planning-examples', label: 'File tools + planning + examples', harness: { fileTools: true, planning: true, examples: true } },
+  { id: 'bash-planning-examples', label: 'Bash tool + planning + examples', harness: { fileTools: false, bash: true, planning: true, examples: true } },
 ];
 
 export const BASELINE_ID = 'baseline';

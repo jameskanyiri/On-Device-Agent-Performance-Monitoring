@@ -12,13 +12,13 @@ export type RunOutcome = 'finished' | 'wrong' | 'gave-up' | 'asked' | 'tool-limi
 export const OUTCOMES: { id: RunOutcome; label: string; hint: string }[] = [
   { id: 'finished', label: 'Finished', hint: 'Did the task: the check passed' },
   { id: 'wrong', label: 'Wrong result', hint: 'Answered or acted, but the check failed' },
-  { id: 'gave-up', label: 'Gave up', hint: 'Said it couldn’t do it or couldn’t find it' },
-  { id: 'asked', label: 'Asked instead', hint: 'Asked the user a question instead of acting' },
+  { id: 'gave-up', label: 'Gave up', hint: 'Said it couldn’t do it, couldn’t find it or had no access' },
+  { id: 'asked', label: 'Asked instead', hint: 'Asked the user a question without doing any work first' },
   { id: 'tool-limit', label: 'Hit tool limit', hint: 'Ran out of tool calls (maxToolTurns)' },
   { id: 'crashed', label: 'Crashed', hint: 'The run errored or timed out' },
 ];
 
-const GAVE_UP = /\b(can['’]?t|cannot|couldn['’]?t|unable to|not able to|wasn['’]?t able)\b.{0,40}\b(find|locate|access|open|read|see|do|complete|edit|create|save)|\b(doesn['’]?t|does not) (seem to )?exist|\bno such file|\bnot found\b/i;
+const GAVE_UP = /\b(can['’]?t|cannot|could ?n['’]?o?t|unable to|not able to|wasn['’]?t able)\b.{0,40}\b(find|locate|access|open|read|see|do|complete|edit|create|save|tell|help|fulfill)|\b(do not|don['’]?t) have access|\b(doesn['’]?t|does not) (seem to )?exist|\bno such file|\bnot found\b/i;
 const ASKS = /\b(could|can|would) you\b[^.?!]*\?|\bplease (provide|tell|specify|share|confirm|clarify|let me know)\b|\bwhat would you like\b|\bdo you want me to\b[^.?!]*\?|\bwhich (file|one|note)s?\b[^.?!]*\?/i;
 
 export function runOutcome(run: RunResult, check: CheckOutcome): RunOutcome {
@@ -27,7 +27,9 @@ export function runOutcome(run: RunResult, check: CheckOutcome): RunOutcome {
   if (finish.includes('maxToolTurns')) return 'tool-limit';
   if (check.pass) return 'finished';
   const reply = run.turns.at(-1)?.reply ?? '';
-  if (ASKS.test(reply)) return 'asked';
+  // "Asked instead of acting" only if no tool call succeeded first: searching, finding
+  // nothing and then asking is giving up.
+  if (ASKS.test(reply) && !run.tools.some((t) => t.ok)) return 'asked';
   if (GAVE_UP.test(reply)) return 'gave-up';
   return 'wrong';
 }

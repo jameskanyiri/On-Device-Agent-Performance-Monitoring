@@ -12,7 +12,7 @@ const turn = (reply: string, finishReason: TurnRecord['finishReason'] = 'stop'):
   endedAt: 1,
   generations: [],
 });
-const run = (turns: TurnRecord[], ok = true) => ({ ok, turns }) as unknown as RunResult;
+const run = (turns: TurnRecord[], ok = true, tools: ToolRecord[] = []) => ({ ok, turns, tools }) as unknown as RunResult;
 const pass = { pass: true, detail: '' };
 const fail = { pass: false, detail: '' };
 
@@ -39,6 +39,29 @@ describe('runOutcome', () => {
   it('gave up, with curly apostrophes too', () => {
     expect(runOutcome(run([turn('I couldn’t find any notes about the dentist.')]), fail)).toBe('gave-up');
     expect(runOutcome(run([turn('The file /notes/budget.md does not exist.')]), fail)).toBe('gave-up');
+  });
+
+  it('gave up: no access, cannot tell, cannot fulfil (seen on the phone, 14 Oct)', () => {
+    expect(runOutcome(run([turn('I am sorry, but I do not have access to your workspace or files. Therefore, I cannot tell you how many.')]), fail)).toBe('gave-up');
+    expect(runOutcome(run([turn('I am sorry, but I cannot fulfill that request.')]), fail)).toBe('gave-up');
+  });
+
+  it('searched, found nothing, then asked: gave up, not asked instead', () => {
+    const glob: ToolRecord = { turn: 0, name: 'glob', ok: true, args: { pattern: '**/budget_sync_notes.md' } };
+    const reply = 'I could not find any file named `budget_sync_notes.md`. Could you please check the file name?';
+    expect(runOutcome(run([turn(reply)], true, [glob]), fail)).toBe('gave-up');
+    // A failed call is no work done: still asked instead.
+    const failed: ToolRecord = { turn: 0, name: 'read_file', ok: false, args: { file_path: '/notes' } };
+    expect(runOutcome(run([turn('Could you please run ls on /notes first?')], true, [failed]), fail)).toBe('asked');
+  });
+
+  it('claimed it made changes after its edits failed: wrong, not asked', () => {
+    const tools: ToolRecord[] = [
+      { turn: 0, name: 'read_file', ok: true, args: { file_path: '/drafts/letter.txt' } },
+      { turn: 0, name: 'edit_file', ok: false, args: { file_path: '/drafts/letter.txt' } },
+    ];
+    const reply = 'I have made the following changes: I edited /drafts/letter.txt. Would you like me to do anything else?';
+    expect(runOutcome(run([turn(reply)], true, tools), fail)).toBe('wrong');
   });
 
   it('wrong when it confidently answers and the check fails', () => {

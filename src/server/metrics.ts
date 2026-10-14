@@ -111,11 +111,12 @@ export function summarizeRun(run: RunResult): RunMetrics {
   const prefillS = gens.length ? sum(reading.map((r) => r.ms)) / 1000 : undefined;
   const readTokens = reading.every((r) => r.tokens !== null) ? sum(reading.map((r) => r.tokens!)) : undefined;
   const generatedTokens = sum(gens.map((g) => g.generatedTokens));
-  const { idleStart, loadStart, turnsEnd } = run.phases;
+  const { idleStart, warmupStart, loadStart, turnsEnd } = run.phases;
+  const idleEnd = warmupStart ?? loadStart;
   const activeEnd = turnsEnd ?? run.endedAt;
 
   const samples = run.samples;
-  const idle = samples.filter((s) => s.t >= idleStart && (loadStart === undefined || s.t < loadStart));
+  const idle = samples.filter((s) => s.t >= idleStart && (idleEnd === undefined || s.t < idleEnd));
   const active = loadStart === undefined ? [] : samples.filter((s) => s.t >= loadStart && s.t <= activeEnd);
 
   const footprints = (xs: MetricSample[]) =>

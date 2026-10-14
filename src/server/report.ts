@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { RunResult } from '@/shared/protocol';
 import type { CheckOutcome, Task } from './checks';
 import { summarizeRun, type RunMetrics } from './metrics';
+import { OUTCOMES, runOutcome, toolRepeats, type RunOutcome } from './outcome';
 import { BASELINE_ID, SCENARIOS } from './scenarios';
 import { SUITES } from './suites';
 
@@ -29,6 +30,10 @@ export type ScoredRun = {
   task?: Task;
   metrics: RunMetrics;
   check: CheckOutcome;
+  outcome: RunOutcome;
+  /** Tool calls repeated with the same arguments, and whether that became a doom loop. */
+  repeats: number;
+  looped: boolean;
 };
 
 export function scoreRun(run: RunResult, suite: Task[]): ScoredRun {
@@ -44,7 +49,7 @@ export function scoreRun(run: RunResult, suite: Task[]): ScoredRun {
       check = { pass: false, detail: `check threw: ${String(e)}` };
     }
   }
-  return { run, task, metrics, check };
+  return { run, task, metrics, check, outcome: runOutcome(run, check), ...toolRepeats(run.tools) };
 }
 
 export function loadRuns(dir: string): RunResult[] {
@@ -160,6 +165,17 @@ export function buildReport(dir: string): string {
         ['Metric', ...scenarioIds.map(scenarioLabel)],
         [
           ['Pass rate', ...scenarioIds.map((id) => pct(passRate(byScenario(id))))],
+          // Why the rest didn't finish.
+          ...OUTCOMES.filter((o) => o.id !== 'finished' && forModel.some((r) => r.outcome === o.id)).map((o) => [
+            `${o.label}`,
+            ...scenarioIds.map((id) => String(byScenario(id).filter((r) => r.outcome === o.id).length)),
+          ]),
+          ...(forModel.some((r) => r.repeats)
+            ? [
+                ['Runs with a doom loop', ...scenarioIds.map((id) => String(byScenario(id).filter((r) => r.looped).length))],
+                ['Repeated tool calls', ...scenarioIds.map((id) => String(byScenario(id).reduce((a, r) => a + r.repeats, 0)))],
+              ]
+            : []),
           ['Runs', ...scenarioIds.map((id) => String(byScenario(id).length))],
           ['Failed runs (crash, OOM)', ...scenarioIds.map((id) => String(byScenario(id).filter((r) => !r.run.ok).length))],
           ...COLUMNS.map((c) => [c.label, ...scenarioIds.map((id) => fmtMeanSd(values(byScenario(id), c.pick), c.digits))]),
@@ -272,13 +288,13 @@ export function buildCsv(dir: string): string {
   const suite = SUITES[manifest.suite] ?? [];
   const scored = loadRuns(dir).map((run) => scoreRun(run, suite));
   const metricKeys = scored.length ? (Object.keys(scored[0]!.metrics) as (keyof RunMetrics)[]) : [];
-  const header = ['jobId', 'model', 'scenario', 'task', 'rep', 'pass', ...metricKeys];
+  const header = ['jobId', 'model', 'scenario', 'task', 'rep', 'pass', 'outcome', 'looped', 'repeatedToolCalls', ...metricKeys];
   const escape = (v: unknown) => {
     const s = v === undefined ? '' : String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const rows = scored.map((r) =>
-    [r.run.jobId, r.run.modelId, r.run.scenarioId, r.run.taskId, r.run.rep, r.check.pass, ...metricKeys.map((k) => r.metrics[k])]
+    [r.run.jobId, r.run.modelId, r.run.scenarioId, r.run.taskId, r.run.rep, r.check.pass, r.outcome, r.looped, r.repeats, ...metricKeys.map((k) => r.metrics[k])]
       .map(escape)
       .join(',')
   );

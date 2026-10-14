@@ -50,6 +50,18 @@ function run(over: Partial<RunResult> = {}): RunResult {
 }
 
 describe('summarizeRun', () => {
+  it('keeps the warm-up out of the idle baseline', () => {
+    const idleOnly = summarizeRun(run({ samples: [sample(0, 'nominal', { powerW: 1 }), sample(500, 'nominal', { powerW: 9 })] }));
+    const warmedUp = summarizeRun(
+      run({
+        phases: { idleStart: 0, warmupStart: 400, loadStart: 1000, loadEnd: 2000, turnsEnd: 10_000 },
+        samples: [sample(0, 'nominal', { powerW: 1 }), sample(500, 'nominal', { powerW: 9 })],
+      }),
+    );
+    expect(warmedUp.powerIdleW).toBe(1);
+    expect(idleOnly.powerIdleW).not.toBe(1);
+  });
+
   it('splits time into reading, writing and the rest, and gives reading speed', () => {
     const m = summarizeRun(run());
     // Reading = separate prefill (500 ms) + time to first token (600 ms).

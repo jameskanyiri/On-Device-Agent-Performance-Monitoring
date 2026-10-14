@@ -199,6 +199,7 @@ function NewBenchmark({ options }: { options: BenchState['options'] }) {
   const [name, setName] = useState('');
   const [between, setBetween] = useState<'cool' | 'steady' | 'back'>('cool');
   const [temperature, setTemperature] = useState('0.2');
+  const [warmup, setWarmup] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -227,6 +228,7 @@ function NewBenchmark({ options }: { options: BenchState['options'] }) {
         turnTimeoutMs: Number(timeoutS) * 1000,
         temperature: Number(temperature),
         backToBack: between === 'back',
+        warmup,
         stableMs: between === 'steady' ? 60_000 : 0,
       }),
     });
@@ -293,6 +295,19 @@ function NewBenchmark({ options }: { options: BenchState['options'] }) {
             </ToggleGroupItem>
             <ToggleGroupItem value="back" className="text-xs data-[state=on]:bg-foreground/[0.07]">
               Back to back
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <span id="warmup-label" className="text-xs text-subtle-foreground">
+            Warm-up
+          </span>
+          <ToggleGroup type="single" variant="outline" size="sm" value={warmup ? 'on' : 'off'} onValueChange={(v) => v && setWarmup(v === 'on')} aria-labelledby="warmup-label">
+            <ToggleGroupItem value="on" className="text-xs data-[state=on]:bg-foreground/[0.07]">
+              On
+            </ToggleGroupItem>
+            <ToggleGroupItem value="off" className="text-xs data-[state=on]:bg-foreground/[0.07]">
+              Off
             </ToggleGroupItem>
           </ToggleGroup>
         </div>

@@ -32,6 +32,10 @@ export type BenchConfig = {
   /** No cool-down between runs (the paper's sustained-load protocol): only a 1 s gap. */
   backToBack?: boolean;
   turnTimeoutMs?: number;
+  /** Warm the model up in a throwaway session before each run (default on). */
+  warmup?: boolean;
+  /** Model calls per message with tools on (default 10: room for 4–6-step tasks and a planner). */
+  maxToolTurns?: number;
   temperature?: number;
   maxNewTokens?: number;
 };
@@ -151,6 +155,8 @@ export function startBench(config: BenchConfig) {
           ? { settleMs: 0, maxWaitMs: 0, stableMs: 0 }
           : { settleMs: config.settleMs ?? 10_000, maxWaitMs: config.cooldownMaxMs ?? 180_000, stableMs: config.stableMs ?? 0 },
         turnTimeoutMs: config.turnTimeoutMs ?? 240_000,
+        warmup: config.warmup ?? true,
+        maxToolTurns: config.maxToolTurns ?? 10,
       });
     }
   }

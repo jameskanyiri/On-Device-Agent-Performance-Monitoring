@@ -9,6 +9,7 @@ import type { MetricSample } from '@/shared/device-metrics';
 import type { RunResult } from '@/shared/protocol';
 import type { LiveBeat, Span, Trace, TraceDevice } from '@/shared/trace';
 import { runReading } from './reading';
+import { OUTCOMES } from './outcome';
 import { loadRuns, scoreRun, type Manifest } from './report';
 import { SCENARIOS } from './scenarios';
 import { SUITES } from './suites';
@@ -162,6 +163,7 @@ export function sessionDetail(id: string) {
       cooldownMaxMs: (options.cooldownMaxMs as number | undefined) ?? 180_000,
       stableMs: (options.stableMs as number | undefined) ?? 0,
       backToBack: options.backToBack === true,
+      warmup: runs.some((r) => r.phases.warmupStart !== undefined),
       order: 'Shuffled each repeat',
     },
   };
@@ -170,8 +172,9 @@ export function sessionDetail(id: string) {
     environment,
     scenarios: SCENARIOS.filter((s) => manifest.scenarios.includes(s.id)),
     tasks: suite.map((t) => ({ id: t.id, title: t.title, needsTools: t.needsTools })),
+    outcomes: OUTCOMES,
     runs: runs.map((run) => {
-      const { metrics, check } = scoreRun(run, suite);
+      const { metrics, check, outcome, repeats, looped } = scoreRun(run, suite);
       return {
         jobId: run.jobId,
         modelId: run.modelId,
@@ -183,6 +186,9 @@ export function sessionDetail(id: string) {
         startedAt: run.startedAt,
         pass: check.pass,
         detail: check.detail,
+        outcome,
+        repeats,
+        looped,
         prompt: run.turns[0] ? clip(run.turns[0].prompt, 200) : null,
         reply: run.turns.at(-1) ? clip(run.turns.at(-1)!.reply, 200) : null,
         metrics,
@@ -197,11 +203,14 @@ export function runDetail(sessionId: string, jobId: string) {
   const path = join(dir, 'runs', `${jobId.replace(/[^\w.-]/g, '')}.json`);
   if (!existsSync(path)) throw new NotFound(`No run ${jobId}`);
   const run = JSON.parse(readFileSync(path, 'utf8')) as RunResult;
-  const { metrics, check } = scoreRun(run, SUITES[manifest.suite] ?? []);
+  const { metrics, check, outcome, repeats, looped } = scoreRun(run, SUITES[manifest.suite] ?? []);
   return {
     trace: runToTrace(run),
     metrics,
     check,
+    outcome,
+    repeats,
+    looped,
     turns: run.turns.map((t) => ({ prompt: t.prompt, reply: t.reply, finishReason: t.finishReason })),
     workspaceAfter: run.workspaceAfter,
   };
@@ -363,11 +372,23 @@ export function runToTrace(run: RunResult): Trace {
     status: run.ok ? 'ok' : timedOut ? 'timeout' : 'error',
     attrs: { model: run.modelId, scenario: run.scenarioId, task: run.taskId, error: run.error ?? null },
   });
-  const { idleStart, loadStart, loadEnd } = run.phases;
+  const { idleStart, warmupStart, loadStart, loadEnd } = run.phases;
   if (run.cooldownMs && idleStart) {
     add({ parentId: root, name: 'cooldown', kind: 'cooldown', start: idleStart - run.cooldownMs, end: idleStart, status: 'ok' });
   }
-  if (idleStart && loadStart) add({ parentId: root, name: 'idle baseline', kind: 'idle', start: idleStart, end: loadStart, status: 'ok' });
+  const idleEnd = warmupStart ?? loadStart;
+  if (idleStart && idleEnd) add({ parentId: root, name: 'idle baseline', kind: 'idle', start: idleStart, end: idleEnd, status: 'ok' });
+  if (warmupStart) {
+    add({
+      parentId: root,
+      name: 'warm-up',
+      kind: 'load',
+      start: warmupStart,
+      end: loadStart ?? run.endedAt,
+      status: loadStart ? 'ok' : 'error',
+      attrs: { loadMs: run.warmup?.loadMs ?? null, firstTokenWallMs: run.warmup?.firstTokenWallMs ?? null },
+    });
+  }
   if (loadStart) {
     add({
       parentId: root,

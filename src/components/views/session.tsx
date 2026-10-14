@@ -34,6 +34,11 @@ type EvalRun = {
   startedAt: number;
   pass: boolean;
   detail: string;
+  /** How it ended: finished, wrong, gave-up, asked, tool-limit or crashed. */
+  outcome: string;
+  /** Tool calls repeated with the same arguments, and whether that became a doom loop. */
+  repeats: number;
+  looped: boolean;
   prompt: string | null;
   reply: string | null;
   metrics: Record<string, number | string | boolean | undefined>;
@@ -42,6 +47,7 @@ type Session = {
   manifest: { suite: string; models: string[]; scenarios: string[]; tasks: string[]; reps: number; startedAt: string };
   scenarios: Scenario[];
   tasks: { id: string; title: string; needsTools: boolean }[];
+  outcomes: OutcomeDef[];
   runs: EvalRun[];
   now: number;
   running: boolean;
@@ -56,9 +62,11 @@ type Session = {
     contextWindow: string[];
     app: string[];
     decoding: string[];
-    protocol: { sampleMs: number; idleMs: number; settleMs: number; cooldownMaxMs: number; stableMs: number; backToBack: boolean; order: string };
+    protocol: { sampleMs: number; idleMs: number; settleMs: number; cooldownMaxMs: number; stableMs: number; backToBack: boolean; warmup: boolean; order: string };
   };
 };
+
+type OutcomeDef = { id: string; label: string; hint: string };
 
 type Outcome = 'pass' | 'fail' | 'error' | 'timeout';
 const outcome = (r: EvalRun): Outcome => (r.ok ? (r.pass ? 'pass' : 'fail') : /timed out/.test(r.error ?? '') ? 'timeout' : 'error');
@@ -121,7 +129,7 @@ export function SessionView({ id }: { id: string }) {
         return (
           <div key={model} className="flex flex-col gap-6">
             <Section title={title('Compared')} meta={`Mean of completed runs, ± standard deviation · coefficient of variation · against ${label(baseline)}`}>
-              <Comparison runs={forModel} ids={ids} baseline={baseline} label={label} />
+              <Comparison runs={forModel} ids={ids} baseline={baseline} label={label} outcomes={data.outcomes} />
             </Section>
             <Section title={title('By task')} meta="One mark per repeat · click one to open it">
               <TaskGrid
@@ -200,6 +208,7 @@ function Environment({ env }: { env: Session['environment'] }) {
           ['Decoding', list(env.decoding)],
           ['Between runs', between],
           ['Sampling', `Every ${fmtDur(p.sampleMs)}`],
+          ['Warm-up', p.warmup ? 'Throwaway load + a few tokens before each run, not counted' : 'None: turn 1 includes the first read after load'],
           ['Order', p.order],
           ['Model', 'Loaded fresh for every run (cold); warm runs are not supported yet'],
         ]}
@@ -255,6 +264,12 @@ function Spread({ xs, fmt }: { xs: number[]; fmt: (v: number) => string }) {
   );
 }
 
+/** "2 of 30 (7%)" */
+function countOf(rs: EvalRun[], pred: (r: EvalRun) => boolean): string {
+  const n = rs.filter(pred).length;
+  return rs.length ? `${n} of ${rs.length}${n ? ` (${Math.round((n / rs.length) * 100)}%)` : ''}` : '–';
+}
+
 function PointsDelta({ base, value }: { base?: number; value?: number }) {
   if (!isNum(base) || !isNum(value)) return <span className="text-subtle-foreground">–</span>;
   const d = Math.round(value - base);
@@ -262,7 +277,7 @@ function PointsDelta({ base, value }: { base?: number; value?: number }) {
 }
 
 /** Each group of numbers in its own card: the setups side by side, then the change. */
-function Comparison({ runs, ids, baseline, label }: { runs: EvalRun[]; ids: string[]; baseline: string; label: (sid: string) => string }) {
+function Comparison({ runs, ids, baseline, label, outcomes }: { runs: EvalRun[]; ids: string[]; baseline: string; label: (sid: string) => string; outcomes: OutcomeDef[] }) {
   const others = ids.filter((s) => s !== baseline);
   const by = (sid: string) => runs.filter((r) => r.scenarioId === sid);
   const values = (sid: string, key: string) => by(sid).filter((r) => r.ok).map((r) => r.metrics[key]).filter(isNum);
@@ -276,6 +291,25 @@ function Comparison({ runs, ids, baseline, label }: { runs: EvalRun[]; ids: stri
       values: ids.map((s) => (isNum(passRate(by(s))) ? `${Math.round(passRate(by(s))!)}%` : '–')),
       deltas: others.map((s) => <PointsDelta key={s} base={passRate(by(baseline))} value={passRate(by(s))} />),
     },
+    // Why the rest didn't finish: one row per way a run ended, when any run ended that way.
+    ...outcomes
+      .filter((o) => o.id !== 'finished' && runs.some((r) => r.outcome === o.id))
+      .map((o) => ({
+        label: o.label,
+        hint: o.hint,
+        values: ids.map((s) => countOf(by(s), (r) => r.outcome === o.id)),
+        deltas: others.map(() => null),
+      })),
+    ...(runs.some((r) => r.repeats)
+      ? [
+          {
+            label: 'Doom loops',
+            hint: 'Runs that repeated a tool call with the same arguments twice in a row, or 3+ times',
+            values: ids.map((s) => countOf(by(s), (r) => r.looped)),
+            deltas: others.map(() => null),
+          },
+        ]
+      : []),
     {
       label: 'Runs',
       hint: 'Errors and time-outs in brackets',

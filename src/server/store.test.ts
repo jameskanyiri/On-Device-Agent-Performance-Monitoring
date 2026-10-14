@@ -148,4 +148,32 @@ describe('runToTrace', () => {
     expect(gen.attrs?.tokensPerSec).toBe(10);
     expect(trace.spans.find((s) => s.kind === 'tool')!.parentId).toBe(trace.spans.find((s) => s.kind === 'turn')!.id);
   });
+
+  it('shows the warm-up between the idle baseline and the measured load', () => {
+    const t0 = now;
+    const run: RunResult = {
+      jobId: 'j',
+      sessionId: 's',
+      modelId: 'gemma4-e2b',
+      scenarioId: 'baseline',
+      taskId: 't',
+      rep: 1,
+      harness: { fileTools: false },
+      device: { platform: 'ios', cpuCount: 6, physicalMemoryBytes: 8e9, modelName: 'iPhone', osName: 'iOS', osVersion: '27', appVersion: '1' },
+      ok: true,
+      startedAt: t0,
+      endedAt: t0 + 20_000,
+      cooldownMs: 0,
+      phases: { idleStart: t0, warmupStart: t0 + 3000, loadStart: t0 + 8000, loadEnd: t0 + 9000, turnsEnd: t0 + 19_000 },
+      warmup: { loadMs: 1200, firstTokenWallMs: 3500, totalMs: 5000 },
+      turns: [],
+      tools: [],
+      workspaceAfter: {},
+      samples: [],
+    };
+    const spans = store.runToTrace(run).spans;
+    expect(spans.map((s) => s.name)).toEqual(['baseline · t · rep 1', 'idle baseline', 'warm-up', 'load']);
+    expect(spans[1].end).toBe(t0 + 3000);
+    expect(spans[2]).toMatchObject({ start: t0 + 3000, end: t0 + 8000, attrs: { firstTokenWallMs: 3500 } });
+  });
 });

@@ -15,7 +15,7 @@ export const OUTCOMES: { id: RunOutcome; label: string; hint: string }[] = [
   { id: 'gave-up', label: 'Gave up', hint: 'Said it couldn’t do it, couldn’t find it or had no access' },
   { id: 'asked', label: 'Asked instead', hint: 'Asked the user a question without doing any work first' },
   { id: 'tool-limit', label: 'Hit tool limit', hint: 'Ran out of tool calls (maxToolTurns)' },
-  { id: 'context-full', label: 'Context full', hint: 'The runtime failed reading more in, with the context estimated at 90%+ of the window' },
+  { id: 'context-full', label: 'Context full', hint: 'The runtime failed reading more in, with the context estimated at 85%+ of the window' },
   { id: 'crashed', label: 'Crashed', hint: 'The run errored or timed out' },
 ];
 
@@ -39,7 +39,8 @@ export function runOutcome(run: RunResult, check: CheckOutcome): RunOutcome {
  * A failed prefill with the context nearly full: the window ran out. The runtime rolls the
  * context back on failure, so it's estimated from the last turn's start, every tool call's
  * arguments and result (≈3 characters per token, measured 14 Oct), plus ~20 tokens of
- * chat-template markup per call.
+ * chat-template markup per call. The estimate runs low (landlord-follow-up, 14 Oct: 1,810
+ * estimated where an identical run measured 1,978), so 85% of the window counts as full.
  */
 export function contextFull(run: RunResult): boolean {
   if (!/prefill/i.test(run.error ?? '') || !run.load?.maxSeqLen) return false;
@@ -47,7 +48,7 @@ export function contextFull(run: RunResult): boolean {
   const start = last?.kvPosBefore ?? run.load.initTokens;
   const calls = run.tools.filter((t) => t.turn === (last?.index ?? 0));
   const chars = calls.reduce((a, t) => a + JSON.stringify(t.args ?? {}).length + (t.resultChars ?? 0), 0);
-  return start + chars / 3 + calls.length * 20 >= 0.9 * run.load.maxSeqLen;
+  return start + chars / 3 + calls.length * 20 >= 0.85 * run.load.maxSeqLen;
 }
 
 /** JSON with object keys sorted at every depth, so argument order doesn't matter. */

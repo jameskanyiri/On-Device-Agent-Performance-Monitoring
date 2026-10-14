@@ -34,6 +34,17 @@ describe('runOutcome: context full', () => {
     expect(runOutcome(crashed('LLMRunner.prefill: Failed: Error::Internal', 1351), fail)).toBe('context-full');
   });
 
+  it('landlord-follow-up, 14 Oct: estimated at 1,810, but an identical run measured 1,978', () => {
+    const landlord: ToolRecord[] = [
+      { turn: 0, name: 'todo', ok: true, args: { steps: [{ step: 'keep what is there and add a sentence asking them to fix the tap by Friday to /drafts/letter.txt', done: false }, { step: 'add "Follow up with landlord" to /todo.md', done: false }] }, resultChars: 276 },
+      { turn: 0, name: 'read_file', ok: true, args: { file_path: '/drafts/letter.txt' }, resultChars: 70 },
+      { turn: 0, name: 'edit_file', ok: false, args: { file_path: '/drafts/letter.txt', old_string: '     1\tDear landlord,', new_string: 'Dear landlord, please fix the tap by Friday.' }, resultChars: 105 },
+      { turn: 0, name: 'write_file', ok: false, args: { file_path: '/todo.md', content: '- [ ] Follow up with landlord' }, resultChars: 84 },
+    ];
+    const r = { ok: false, error: 'LLMRunner.prefill: Failed: Error::Internal', load: { sessionCreateMs: 1, initTokens: 1351, maxSeqLen: 2048 }, tools: landlord, turns: [{ ...turn('', 'error'), kvPosBefore: 1351 }] } as unknown as RunResult;
+    expect(runOutcome(r, fail)).toBe('context-full');
+  });
+
   it('the same failure far from the window, or another error, is a crash', () => {
     expect(runOutcome(crashed('LLMRunner.prefill: Failed: Error::Internal', 200), fail)).toBe('crashed');
     expect(runOutcome(crashed('Turn 1 timed out after 240 s', 1351), fail)).toBe('crashed');

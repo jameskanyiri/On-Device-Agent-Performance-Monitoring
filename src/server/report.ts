@@ -229,7 +229,7 @@ export function buildReport(dir: string): string {
     );
 
     // Tool use per task, including calls on tasks that need none.
-    const toolScenarios = scenarioIds.filter((id) => byScenario(id).some((r) => r.run.harness.fileTools));
+    const toolScenarios = scenarioIds.filter((id) => byScenario(id).some((r) => r.run.harness.fileTools || r.run.harness.bash));
     if (toolScenarios.length) {
       out.push('### Tool use by task', '');
       out.push(

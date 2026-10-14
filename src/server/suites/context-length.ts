@@ -8,13 +8,18 @@ import { replyMatches, type Task } from '../checks';
  */
 
 const TOPICS = ['garden', 'car service', 'school fees', 'book club', 'gym', 'groceries', 'rent', 'holiday', 'dentist', 'internet', 'birthday', 'plumber'];
+const CHARS_PER_TOKEN = 3;
 const NEEDLE = '- The agreed marketing budget for Q4 is $4,200 (owner: Wanjiru).';
 
-/** Filler notes of about `tokens` tokens (≈ 4 characters per token), deterministic. */
+/**
+ * Filler notes of about `tokens` tokens, deterministic. Gemma reads these notes at about
+ * 3 characters per token (measured 14 Oct: 617 characters → 199 tokens); 4 overshot by ~30%
+ * and put the largest task at the edge of the 2,048-token window.
+ */
 function filler(tokens: number): string[] {
   const lines: string[] = [];
   let chars = 0;
-  for (let i = 0; chars < tokens * 4; i++) {
+  for (let i = 0; chars < tokens * CHARS_PER_TOKEN; i++) {
     const topic = TOPICS[i % TOPICS.length]!;
     const line = `- Note ${i + 1} (${topic}): remember to follow up on the ${topic} on day ${(i * 7) % 28 + 1}; it costs about ${(i * 37) % 900 + 100} shillings.`;
     lines.push(line);

@@ -48,7 +48,8 @@ export const BARE_SUITE: Task[] = [
     title: 'Arithmetic: pens and change',
     needsTools: false,
     turns: ['Pens cost 35 shillings each. How many pens can I buy with 500 shillings, and how much change do I get?'],
-    check: (run) => all(replyMatches(run, /\b14\b/), replyMatches(run, /\b10\b/)),
+    // Whole numbers only: "14.28 pens" is wrong.
+    check: (run) => all(replyMatches(run, /\b14\b(?![.,]\d)/), replyMatches(run, /\b10\b(?![.,]\d)/)),
   },
   {
     id: 'eggs-left',
@@ -77,7 +78,7 @@ export const BARE_SUITE: Task[] = [
     title: 'Format: at most 15 words',
     needsTools: false,
     turns: ['In one sentence of at most 15 words, explain why the sky is blue.'],
-    check: (run) => maxWords(run, 15),
+    check: (run) => all(maxWords(run, 15), replyMatches(run, /scatter|rayleigh|wavelength/i)),
   },
   // ── Reading text given in the prompt (the step-1 notes, pasted) ──
   {
@@ -92,7 +93,12 @@ export const BARE_SUITE: Task[] = [
     title: 'Read pasted notes: which mention the dentist',
     needsTools: false,
     turns: [`Here are my notes:\n\n${pasted(Object.keys(NOTES))}\n\nWhich of these files mention the dentist? Give the file paths.`],
-    check: (run) => all(replyMatches(run, /health\.md/i), replyMatches(run, /todo\.md/i)),
+    check: (run) => {
+      const listed = Object.keys(NOTES).filter((p) => lastReply(run).includes(p.split('/').pop()!));
+      const wrong = listed.filter((p) => !/dentist/i.test(NOTES[p as keyof typeof NOTES]));
+      if (wrong.length) return { pass: false, detail: `also named files without the dentist: ${wrong.join(', ')}` };
+      return all(replyMatches(run, /health\.md/i), replyMatches(run, /todo\.md/i));
+    },
   },
   // ── Multi-turn ──
   {
@@ -111,7 +117,10 @@ export const BARE_SUITE: Task[] = [
     check: (run) => {
       const reply = lastReply(run);
       if (/4,?200/.test(reply)) return { pass: false, detail: 'gave the real answer without seeing the file (leak?)' };
-      return /can'?t|cannot|don'?t have|do not have|no access|unable|not able/i.test(reply)
+      // A guessed amount is a made-up answer, however it's hedged.
+      if (/[$€£]\s?\d|\d[\d,.]*\s*(k\b|dollars|shillings|ksh|usd)/i.test(reply)) return { pass: false, detail: `made up an amount: "${reply.slice(0, 100)}"` };
+      // Models often write curly apostrophes (can’t).
+      return /can['’]?t|cannot|don['’]?t have|do not have|no access|unable|not able|doesn['’]?t exist|does not exist|not found|no such file/i.test(reply)
         ? { pass: true, detail: 'said it cannot see the file' }
         : { pass: false, detail: `answered as if it could see the file: "${reply.slice(0, 100)}"` };
     },

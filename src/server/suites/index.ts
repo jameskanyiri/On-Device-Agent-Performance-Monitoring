@@ -14,4 +14,6 @@ export const SUITES: Record<string, Task[]> = {
   'file-tools': FILE_TOOLS_SUITE,
   'multi-step': MULTI_STEP_SUITE,
   'step-1': STEP_1_SUITE,
+  // Step 2 reruns step 1's tasks, so planning is compared on exactly the same work.
+  'step-2': STEP_1_SUITE,
 };

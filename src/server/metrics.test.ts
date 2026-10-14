@@ -50,6 +50,24 @@ function run(over: Partial<RunResult> = {}): RunResult {
 }
 
 describe('summarizeRun', () => {
+  it('summarises the plan in planning runs only', () => {
+    const plan = (steps: unknown, ok = true) => ({ turn: 0, name: 'todo', ok, args: { steps } });
+    const planned = summarizeRun(
+      run({
+        harness: { fileTools: true, planning: true },
+        tools: [
+          plan([{ step: 'find it', done: false }, { step: 'edit it', done: false }, { step: 'check it', done: false }]),
+          { turn: 0, name: 'grep', ok: true, args: { pattern: 'dentist' } },
+          plan('- [x] find it\n- [x] edit it\n- [ ] check it'),
+          plan([], false),
+        ],
+      }),
+    );
+    expect(planned).toMatchObject({ planCalls: 3, planSteps: 3, planDone: 2 });
+    expect(planned.planTokens).toBeGreaterThan(0);
+    expect(summarizeRun(run({ harness: { fileTools: true } })).planCalls).toBeUndefined();
+  });
+
   it('keeps the warm-up out of the idle baseline', () => {
     const idleOnly = summarizeRun(run({ samples: [sample(0, 'nominal', { powerW: 1 }), sample(500, 'nominal', { powerW: 9 })] }));
     const warmedUp = summarizeRun(

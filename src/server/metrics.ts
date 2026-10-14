@@ -41,6 +41,12 @@ export type RunMetrics = {
   toolCalls: number;
   toolErrors: number;
   toolS: number;
+  /** Planning runs only (harness.planning): todo calls, steps in the first plan, steps done in the last. */
+  planCalls?: number;
+  planSteps?: number;
+  planDone?: number;
+  /** Rough tokens the model wrote into its plans (argument characters ÷ 3). */
+  planTokens?: number;
   // Device
   memIdleMB?: number;
   memPeakMB?: number;
@@ -213,6 +219,7 @@ export function summarizeRun(run: RunResult): RunMetrics {
     toolCalls: run.tools.length,
     toolErrors: run.tools.filter((t) => !t.ok).length,
     toolS,
+    ...planSummary(run),
     memIdleMB: mb(memIdle),
     memPeakMB: mb(memPeak),
     memDeltaMB: memIdle !== undefined && memPeak !== undefined ? mb(memPeak - memIdle) : undefined,
@@ -248,4 +255,29 @@ export function summarizeRun(run: RunResult): RunMetrics {
       batteries.length >= 2 && !samples.some((s) => s.batteryState === 'charging' || s.batteryState === 'full') ? (batteries[0]! - batteries.at(-1)!) * 100 : undefined,
     charging: samples.some((s) => s.batteryState === 'charging' || s.batteryState === 'full'),
   };
+}
+
+/**
+ * What the model did with its todo (planning) tool. Reads the steps the way the app's
+ * src/harness/planning.ts does (a list of {step, done}, strings, or a markdown checklist).
+ */
+function planSummary(run: RunResult): Pick<RunMetrics, 'planCalls' | 'planSteps' | 'planDone' | 'planTokens'> {
+  if (!run.harness.planning) return {};
+  const calls = run.tools.filter((t) => t.name === 'todo');
+  const plans = calls.filter((t) => t.ok).map((t) => planSteps(t.args?.steps));
+  return {
+    planCalls: calls.length,
+    planSteps: plans[0]?.length ?? 0,
+    planDone: plans.at(-1)?.filter((s) => s.done).length ?? 0,
+    planTokens: Math.round(sum(calls.map((t) => JSON.stringify(t.args ?? {}).length)) / 3),
+  };
+}
+
+function planSteps(value: unknown): { done: boolean }[] {
+  const items = typeof value === 'string' ? value.split('\n').filter((l) => l.trim()) : Array.isArray(value) ? value : [];
+  return items.map((item) => {
+    if (typeof item === 'string') return { done: /^\s*(?:[-*]|\d+[.)])?\s*\[[xX]\]/.test(item) };
+    const o = (item ?? {}) as Record<string, unknown>;
+    return { done: o.done === true || o.done === 'true' || o.status === 'done' || o.status === 'completed' };
+  });
 }

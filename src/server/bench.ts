@@ -34,7 +34,11 @@ export type BenchConfig = {
   turnTimeoutMs?: number;
   /** Warm the model up in a throwaway session before each run (default on). */
   warmup?: boolean;
-  /** Model calls per message with tools on (default 10: room for 4–6-step tasks and a planner). */
+  /**
+   * Model calls per message with tools on (default 16). A planned 5-step task takes ~10 calls
+   * (each step plus a plan update) and the answer. No step-1 run used more than 4, so 10 → 16
+   * changes nothing for tools without planning.
+   */
   maxToolTurns?: number;
   temperature?: number;
   maxNewTokens?: number;
@@ -156,7 +160,7 @@ export function startBench(config: BenchConfig) {
           : { settleMs: config.settleMs ?? 10_000, maxWaitMs: config.cooldownMaxMs ?? 180_000, stableMs: config.stableMs ?? 0 },
         turnTimeoutMs: config.turnTimeoutMs ?? 240_000,
         warmup: config.warmup ?? true,
-        maxToolTurns: config.maxToolTurns ?? 10,
+        maxToolTurns: config.maxToolTurns ?? 16,
       });
     }
   }

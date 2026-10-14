@@ -19,6 +19,8 @@ import type { DeviceInfo, MetricSample } from './device-metrics';
 export type HarnessConfig = {
   /** Filesystem tools (src/harness/filesystem.ts) and their system prompt. */
   fileTools: boolean;
+  /** The todo planning tool (src/harness/planning.ts) and its system prompt. Step 2. */
+  planning?: boolean;
 };
 
 export type Scenario = {

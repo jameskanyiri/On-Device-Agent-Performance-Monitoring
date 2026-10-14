@@ -30,6 +30,8 @@ export const SCENARIOS: Scenario[] = [
     ].join('\n'),
   },
   { id: 'file-tools', label: 'File tools', harness: { fileTools: true } },
+  // Step 2: the same tools plus the todo planning tool (the app's src/harness/planning.ts).
+  { id: 'planning', label: 'File tools + planning', harness: { fileTools: true, planning: true } },
 ];
 
 export const BASELINE_ID = 'baseline';

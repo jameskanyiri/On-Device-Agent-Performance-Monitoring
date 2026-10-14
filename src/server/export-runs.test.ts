@@ -56,12 +56,15 @@ it.skipIf(!out)('exports the study’s runs', () => {
             'kvPeak', 'maxSeqLen', 'toolCalls', 'toolErrors', 'memPeakMB', 'thermalMax', 'charging', 'planCalls',
           ].map((k) => [k, m[k] ?? null])
         ),
+        // Every tool call in order, for the progress-trajectory figures.
+        tools: run.tools.map((t) => ({ name: t.name, ok: t.ok, args: t.args ?? {} })),
+        reply: run.turns.at(-1)?.reply.slice(0, 300) ?? '',
       });
     }
   }
   mkdirSync(out!, { recursive: true });
   writeFileSync(join(out!, 'runs.json'), JSON.stringify(rows, null, 1));
-  const cols = Object.keys(rows[0]!);
+  const cols = Object.keys(rows[0]!).filter((c) => c !== 'tools');
   const csv = [cols.join(','), ...rows.map((r) => cols.map((c) => JSON.stringify(r[c] ?? '')).join(','))].join('\n');
   writeFileSync(join(out!, 'runs.csv'), csv + '\n');
 });
